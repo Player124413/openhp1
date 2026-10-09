@@ -9,5 +9,5 @@ release/
 .DS_Store
 
 # game files
-res/
+/res/
 thirdparty/
