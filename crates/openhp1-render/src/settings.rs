@@ -235,6 +235,8 @@ pub struct RendererSettings {
     pub antialiasing: Antialiasing,
     pub bloom: bool,
     pub volumetric_lighting: bool,
+    /// Enables hardware ETC2 texture compression when supported by the device.
+    pub etc2_compression: bool,
 }
 
 impl Default for RendererSettings {
@@ -248,6 +250,7 @@ impl Default for RendererSettings {
             antialiasing: Antialiasing::Smaa,
             bloom: false,
             volumetric_lighting: false,
+            etc2_compression: cfg!(target_os = "android"),
         }
     }
 }

@@ -454,6 +454,61 @@ pub(super) fn texture(
     label: &str,
     image: &TextureImage,
 ) -> wgpu::Texture {
+    texture_with_compression(device, queue, label, image, false).0
+}
+
+pub(super) fn texture_with_compression(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &str,
+    image: &TextureImage,
+    use_etc2: bool,
+) -> (wgpu::Texture, usize) {
+    if use_etc2 && image.width > 0 && image.height > 0 {
+        let format = wgpu::TextureFormat::Etc2Rgba8Unorm;
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some(label),
+            size: wgpu::Extent3d {
+                width: image.width,
+                height: image.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: image.mip_level_count(),
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        let mut total_bytes = 0;
+        for (level, (width, height, rgba)) in texture_levels(image).enumerate() {
+            let compressed = openhp1_texture::compress_etc2_rgba(width, height, rgba);
+            let blocks_x = (width + 3) / 4;
+            let blocks_y = (height + 3) / 4;
+            total_bytes += compressed.len();
+
+            let mut destination = texture.as_image_copy();
+            destination.mip_level = level as u32;
+            queue.write_texture(
+                destination,
+                &compressed,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(blocks_x * 16),
+                    rows_per_image: Some(blocks_y),
+                },
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+
+        return (texture, total_bytes);
+    }
+
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {
@@ -471,7 +526,8 @@ pub(super) fn texture(
         view_formats: &[],
     });
     assert!(write_texture_mips(queue, &texture, image));
-    texture
+    let byte_len = image.byte_len();
+    (texture, byte_len)
 }
 
 pub(super) fn write_texture_mips(

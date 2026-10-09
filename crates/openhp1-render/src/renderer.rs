@@ -31,7 +31,8 @@ use modern::{HDR_FORMAT, ModernRenderer};
 use pipeline::{blend_state, color_write_mask, depth_write_enabled, fragment_entry};
 use pipeline::{
     create_attachment_pipeline, create_pipeline, create_screen_pipeline,
-    material_texture_bind_group, texture, texture_bind_group, write_texture_mips,
+    material_texture_bind_group, texture, texture_bind_group, texture_with_compression,
+    write_texture_mips,
 };
 use submission::{SubmissionCommand, SubmissionGeometry, SubmissionPlan};
 use target::{DepthTarget, SampledTarget};
@@ -709,23 +710,24 @@ impl Renderer {
             &lightmap_atlas.image,
         );
         let lightmap_view = lightmap_texture.create_view(&Default::default());
-        let checkerboard = checkerboard();
-        let mut stats = RenderStats {
-            draw_calls: 0,
-            texture_memory_bytes: scene
-                .textures
-                .iter()
-                .map(TextureImage::byte_len)
-                .sum::<usize>()
-                + CHECKERBOARD_MEMORY_BYTES,
-            lightmap_memory_bytes: lightmap_atlas.image.rgba.len(),
-        };
+        let use_etc2 = settings.etc2_compression
+            && device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_ETC2);
+        let mut texture_memory_bytes = 0;
         let textures = scene
             .textures
             .iter()
             .chain(std::iter::once(&checkerboard))
-            .map(|image| texture(device, queue, "OpenHP1 texture", image))
+            .map(|image| {
+                let (tex, bytes) = texture_with_compression(device, queue, "OpenHP1 texture", image, use_etc2);
+                texture_memory_bytes += bytes;
+                tex
+            })
             .collect::<Vec<_>>();
+        let mut stats = RenderStats {
+            draw_calls: 0,
+            texture_memory_bytes: texture_memory_bytes + CHECKERBOARD_MEMORY_BYTES,
+            lightmap_memory_bytes: lightmap_atlas.image.rgba.len(),
+        };
         let texture_bind_groups = std::array::from_fn(|filter| {
             textures
                 .iter()
@@ -1180,13 +1182,16 @@ impl Renderer {
             let Some(current) = self.textures.get(index) else {
                 return false;
             };
+            let use_etc2 = self.settings.etc2_compression
+                && device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_ETC2);
             if texture_needs_recreation(
                 current.width(),
                 current.height(),
                 current.mip_level_count(),
                 image,
             ) {
-                let replacement = texture(device, queue, "OpenHP1 texture", image);
+                let (replacement, _) =
+                    texture_with_compression(device, queue, "OpenHP1 texture", image, use_etc2);
                 let view = replacement.create_view(&Default::default());
                 for filter in 0..2 {
                     self.texture_bind_groups[filter][index] = texture_bind_group(
@@ -1200,8 +1205,38 @@ impl Renderer {
                 }
                 self.textures[index] = replacement;
                 recreated = true;
-            } else if !write_texture_mips(queue, current, image) {
-                return false;
+            } else if !use_etc2 && !write_texture_mips(queue, current, image) {
+                let (replacement, _) =
+                    texture_with_compression(device, queue, "OpenHP1 texture", image, false);
+                let view = replacement.create_view(&Default::default());
+                for filter in 0..2 {
+                    self.texture_bind_groups[filter][index] = texture_bind_group(
+                        device,
+                        &self.texture_layout,
+                        &self.texture_samplers[filter],
+                        &view,
+                        &self.lightmap_view,
+                        &self.lightmap_sampler,
+                    );
+                }
+                self.textures[index] = replacement;
+                recreated = true;
+            } else if use_etc2 {
+                let (replacement, _) =
+                    texture_with_compression(device, queue, "OpenHP1 texture", image, true);
+                let view = replacement.create_view(&Default::default());
+                for filter in 0..2 {
+                    self.texture_bind_groups[filter][index] = texture_bind_group(
+                        device,
+                        &self.texture_layout,
+                        &self.texture_samplers[filter],
+                        &view,
+                        &self.lightmap_view,
+                        &self.lightmap_sampler,
+                    );
+                }
+                self.textures[index] = replacement;
+                recreated = true;
             }
         }
         if recreated {
