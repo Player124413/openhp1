@@ -55,13 +55,23 @@ jobs:
             cargo install cargo-ndk --locked || cargo install cargo-ndk
           fi
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.5'
+      - name: Install Gradle 8.5
+        run: |
+          echo "Downloading Gradle 8.5..."
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip
+          sudo unzip -q -o gradle-8.5-bin.zip -d /opt/gradle
+          echo "/opt/gradle/gradle-8.5/bin" >> "$GITHUB_PATH"
+          echo "PATH=/opt/gradle/gradle-8.5/bin:$PATH" >> "$GITHUB_ENV"
+          rm -f gradle-8.5-bin.zip
+
+      - name: Verify Gradle
+        run: |
+          export PATH="/opt/gradle/gradle-8.5/bin:$PATH"
+          gradle --version
 
       - name: Build Android Libraries and APK
         run: |
+          export PATH="/opt/gradle/gradle-8.5/bin:$PATH"
           chmod +x ./scripts/build-android.sh
           BUILD_ALL_ABIS=1 ./scripts/build-android.sh 2>&1 | tee build.log
 
@@ -73,7 +83,7 @@ jobs:
           tail -n 120 build.log >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Verify APK
+      - name: Verify and List APK
         run: |
           echo "Checking built APK files..."
           ls -la android/app/build/outputs/apk/release/ || ls -la android/app/build/outputs/apk/debug/ || true

@@ -114,5 +114,5 @@ elif command -v gradle >/dev/null 2>&1; then
     )
     info "APK build complete!"
 else
-    info "To assemble APK, run Gradle in $ANDROID_DIR or open project in Android Studio."
+    die "Neither gradlew nor gradle command found! Please install Gradle to build APK."
 fi
