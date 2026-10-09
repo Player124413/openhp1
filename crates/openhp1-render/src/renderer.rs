@@ -710,6 +710,7 @@ impl Renderer {
             &lightmap_atlas.image,
         );
         let lightmap_view = lightmap_texture.create_view(&Default::default());
+        let checkerboard = checkerboard();
         let use_etc2 = settings.etc2_compression
             && device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_ETC2);
         let mut texture_memory_bytes = 0;

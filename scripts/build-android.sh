@@ -74,11 +74,11 @@ build_target() {
     local dst_lib="$JNI_LIBS_DIR/$abi/libopenhp1_game.so"
     if [[ ! -f "$dst_lib" && -f "$src_lib" ]]; then
         cp -v "$src_lib" "$dst_lib"
-    elif [[ -f "$dst_lib" ]]; then
-        info "Native library verified: $dst_lib"
-    else
-        echo "warning: Could not locate $src_lib or $dst_lib"
     fi
+    if [[ ! -f "$dst_lib" ]]; then
+        die "Expected native library was not created: $dst_lib"
+    fi
+    info "Native library verified: $dst_lib"
 }
 
 build_target "$TARGET_ARM64" "arm64-v8a"
