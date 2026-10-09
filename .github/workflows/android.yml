@@ -74,19 +74,7 @@ jobs:
           set -o pipefail
           export PATH="/opt/gradle/gradle-8.5/bin:$PATH"
           chmod +x ./scripts/build-android.sh
-          BUILD_ALL_ABIS=1 ./scripts/build-android.sh 2>&1 | tee build.log
-
-      - name: Save and Push Build Log on Failure
-        if: failure()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout --orphan ci-debug || git checkout -B ci-debug
-          git rm -rf . || true
-          cp build.log ci-build.log || echo "no build.log" > ci-build.log
-          git add ci-build.log
-          git commit -m "CI Build Failure Log" || true
-          git push -f origin ci-debug || true
+          BUILD_ALL_ABIS=1 ./scripts/build-android.sh
 
       - name: Verify and List APK
         run: |
