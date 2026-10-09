@@ -271,10 +271,24 @@ impl ApplicationHandler for GameApp {
             return;
         }
         if let WindowEvent::Touch(touch) = &event {
-            let size = [graphics.config.width as f32, graphics.config.height as f32];
+            let scale = graphics.window.scale_factor() as f32;
+            let logical_size = [
+                graphics.config.width as f32 / scale.max(0.1),
+                graphics.config.height as f32 / scale.max(0.1),
+            ];
+            let logical_touch = winit::event::Touch {
+                device_id: touch.device_id,
+                phase: touch.phase,
+                location: winit::dpi::PhysicalPosition::new(
+                    touch.location.x / scale as f64,
+                    touch.location.y / scale as f64,
+                ),
+                force: touch.force,
+                id: touch.id,
+            };
             graphics.touch.handle_touch(
-                touch,
-                size,
+                &logical_touch,
+                logical_size,
                 &graphics.touch_settings,
                 &mut graphics.touch_editor,
             );
@@ -801,9 +815,22 @@ impl Graphics {
         {
             config.format = linear_format;
         }
-        config.present_mode = wgpu::PresentMode::AutoNoVsync;
+        #[cfg(target_os = "android")]
+        {
+            config.present_mode = wgpu::PresentMode::AutoVsync;
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            config.present_mode = wgpu::PresentMode::AutoNoVsync;
+        }
         config.usage |= wgpu::TextureUsages::COPY_SRC;
         surface.configure(&device, &config);
+        #[cfg(target_os = "android")]
+        let mut graphics_settings = graphics_settings;
+        #[cfg(target_os = "android")]
+        {
+            graphics_settings.resolution = [config.width, config.height];
+        }
         let presentation = Presentation::new(&device, config.format, graphics_settings.resolution);
         let renderer = Renderer::new_with_settings(
             &device,
@@ -896,6 +923,11 @@ impl Graphics {
         self.config.width = size.width;
         self.config.height = size.height;
         self.surface.configure(&self.device, &self.config);
+        #[cfg(target_os = "android")]
+        {
+            self.presentation.resize(&self.device, self.config.format, [size.width, size.height]);
+            self.renderer.resize(&self.device, self.presentation.size());
+        }
     }
 
     fn mouse_button(&mut self, button: MouseButton, state: ElementState) {
@@ -960,9 +992,15 @@ impl Graphics {
         self.touch
             .apply_to_player_input(&mut input, delta_time, &self.touch_settings);
         self.touch.reset_frame_triggers();
+        let skip_requested = input.jump
+            || input.action
+            || self.touch.cast_active
+            || self.touch.jump_active
+            || self.touch.interact_active
+            || self.touch.any_touch_pressed();
         if !self.gameplay_settings.jump_skips_cutscenes {
             self.cutscene_skip = CutsceneSkipState::Inactive;
-        } else if self.cutscene_skip == CutsceneSkipState::Inactive && input.jump {
+        } else if self.cutscene_skip == CutsceneSkipState::Inactive && skip_requested {
             if self.dispatch_cutscene_skip() {
                 self.cutscene_skip = CutsceneSkipState::Cutscene;
             }
@@ -1070,13 +1108,24 @@ impl Graphics {
             self.debug_overlay(ui.ctx());
             self.debug_console.ui(ui);
             if !self.game_ui.is_open() || self.touch_editor.is_active {
-                let size = [self.config.width as f32, self.config.height as f32];
+                let rect = ui.ctx().screen_rect();
+                let size = [rect.width(), rect.height()];
                 self.touch.render(
                     ui.ctx(),
                     size,
                     &mut self.touch_settings,
                     &mut self.touch_editor,
                 );
+                if self.cutscene_skip != CutsceneSkipState::Inactive {
+                    let center = egui::pos2(rect.center().x, rect.min.y + 40.0);
+                    ui.painter().text(
+                        center,
+                        egui::Align2::CENTER_CENTER,
+                        "⏩ ПРОПУСК КАТСЦЕНЫ...",
+                        egui::FontId::proportional(20.0),
+                        egui::Color32::from_rgba_unmultiplied(255, 230, 100, 220),
+                    );
+                }
             }
         });
         self.run_debug_console_commands();

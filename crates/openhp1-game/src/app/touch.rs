@@ -416,6 +416,7 @@ pub struct TouchController {
     menu_triggered: bool,
     console_triggered: bool,
     accumulated_look_delta: Vec2,
+    any_touch_triggered: bool,
 }
 
 impl TouchController {
@@ -431,6 +432,7 @@ impl TouchController {
         self.menu_triggered = false;
         self.console_triggered = false;
         self.accumulated_look_delta = Vec2::ZERO;
+        self.any_touch_triggered = false;
     }
 
     pub fn handle_touch(
@@ -453,6 +455,7 @@ impl TouchController {
 
         match touch.phase {
             TouchPhase::Started => {
+                self.any_touch_triggered = true;
                 let role = self.hit_test(pos, screen_size, settings);
                 self.activate_role(touch.id, role, pos);
             }
@@ -703,6 +706,10 @@ impl TouchController {
 
     pub fn console_requested(&self) -> bool {
         self.console_triggered
+    }
+
+    pub fn any_touch_pressed(&self) -> bool {
+        self.any_touch_triggered
     }
 
     pub fn render(

@@ -21,7 +21,7 @@ impl GameplaySettings {
         Self {
             skip_intro: setting(console, "SkipIntro").unwrap_or(defaults.skip_intro),
             jump_skips_cutscenes: setting(console, "JumpSkipsCutscenes")
-                .unwrap_or(defaults.jump_skips_cutscenes),
+                .unwrap_or(true),
             auto_learn_spells: setting(console, "AutoLearnSpells")
                 .unwrap_or(defaults.auto_learn_spells),
             instant_pickup_wizard_cards: setting(console, "InstantPickupWizardCards")

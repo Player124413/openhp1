@@ -1183,48 +1183,14 @@ impl Renderer {
             let Some(current) = self.textures.get(index) else {
                 return false;
             };
-            let use_etc2 = self.settings.etc2_compression
-                && device.features().contains(wgpu::Features::TEXTURE_COMPRESSION_ETC2);
             if texture_needs_recreation(
                 current.width(),
                 current.height(),
                 current.mip_level_count(),
                 image,
-            ) {
-                let (replacement, _) =
-                    texture_with_compression(device, queue, "OpenHP1 texture", image, use_etc2);
-                let view = replacement.create_view(&Default::default());
-                for filter in 0..2 {
-                    self.texture_bind_groups[filter][index] = texture_bind_group(
-                        device,
-                        &self.texture_layout,
-                        &self.texture_samplers[filter],
-                        &view,
-                        &self.lightmap_view,
-                        &self.lightmap_sampler,
-                    );
-                }
-                self.textures[index] = replacement;
-                recreated = true;
-            } else if !use_etc2 && !write_texture_mips(queue, current, image) {
+            ) || !write_texture_mips(queue, current, image) {
                 let (replacement, _) =
                     texture_with_compression(device, queue, "OpenHP1 texture", image, false);
-                let view = replacement.create_view(&Default::default());
-                for filter in 0..2 {
-                    self.texture_bind_groups[filter][index] = texture_bind_group(
-                        device,
-                        &self.texture_layout,
-                        &self.texture_samplers[filter],
-                        &view,
-                        &self.lightmap_view,
-                        &self.lightmap_sampler,
-                    );
-                }
-                self.textures[index] = replacement;
-                recreated = true;
-            } else if use_etc2 {
-                let (replacement, _) =
-                    texture_with_compression(device, queue, "OpenHP1 texture", image, true);
                 let view = replacement.create_view(&Default::default());
                 for filter in 0..2 {
                     self.texture_bind_groups[filter][index] = texture_bind_group(
