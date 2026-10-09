@@ -250,7 +250,7 @@ impl Default for RendererSettings {
             antialiasing: Antialiasing::Smaa,
             bloom: false,
             volumetric_lighting: false,
-            etc2_compression: cfg!(target_os = "android"),
+            etc2_compression: true,
         }
     }
 }

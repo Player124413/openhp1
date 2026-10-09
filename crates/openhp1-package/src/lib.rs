@@ -12,6 +12,7 @@ mod package;
 mod resolver;
 mod summary;
 mod tables;
+pub mod zip;
 
 pub use error::{Error, Result};
 pub use object::{ObjectReader, ObjectStack, PropertyKind, PropertyTag};
@@ -25,5 +26,6 @@ pub use summary::{
     Export, Generation, HeaderHistory, Import, NameEntry, ObjectReference, PackageHeader,
     PackageSummary,
 };
+pub use zip::{ZipError, find_game_root, install_from_zip, unpack_zip_archive};
 
 pub const PACKAGE_MAGIC: u32 = 0x9e2a_83c1;

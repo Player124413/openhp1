@@ -53,7 +53,7 @@ The modern renderer is exactly what it says on the package. A much more modern r
 
 ## Installation
 
-OpenHP1 requires original game data but does not distribute it. Start `openhp1-launcher`, choose the original game folder containing `Maps` and `System`, select one of its available languages, then select **Play**. The
+OpenHP1 requires original game data but does not distribute it. Start `openhp1-launcher`, select **Choose Game Folder** to pick an existing game directory containing `Maps` and `System` or select **Unpack ZIP Archive** to automatically extract and install from a `.zip` file, select one of its available languages, then select **Play**. The
 launcher remembers the validated folder and language in `OpenHP1.ini`.
 
 For building the game yourself, please refer to the [Development](#development) section below.

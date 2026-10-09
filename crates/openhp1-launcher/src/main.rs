@@ -30,7 +30,6 @@ struct Launcher {
     installation: Option<GameInstallation>,
     status: String,
     status_color: Color32,
-    etc2_enabled: bool,
     touch_enabled: bool,
 }
 
@@ -52,13 +51,6 @@ impl Launcher {
             }
             Err(error) => (None, error.to_string(), Color32::from_rgb(235, 185, 110)),
         };
-        let etc2_enabled = read_openhp1_ini_value("OpenHP1.Renderer", "Etc2Compression")
-            .map(|v| match v.trim().to_ascii_lowercase().as_str() {
-                "true" | "1" | "on" => true,
-                "false" | "0" | "off" => false,
-                _ => cfg!(target_os = "android"),
-            })
-            .unwrap_or(cfg!(target_os = "android"));
         let touch_enabled = read_openhp1_ini_value("OpenHP1.Touch", "Enabled")
             .map(|v| match v.trim().to_ascii_lowercase().as_str() {
                 "true" | "1" | "on" => true,
@@ -71,12 +63,11 @@ impl Launcher {
             installation,
             status,
             status_color,
-            etc2_enabled,
             touch_enabled,
         })
     }
 
-    fn configure(&mut self) {
+    fn choose_game_folder(&mut self) {
         let Some(root) = rfd::FileDialog::new()
             .set_title("Choose the Harry Potter game folder")
             .pick_folder()
@@ -85,6 +76,34 @@ impl Launcher {
         };
         match configure_game_installation(&root, None) {
             Ok(installation) => self.set_installation(installation),
+            Err(error) => self.set_error(error),
+        }
+    }
+
+    fn unpack_zip(&mut self) {
+        let Some(zip_file) = rfd::FileDialog::new()
+            .set_title("Select Harry Potter ZIP archive")
+            .add_filter("ZIP Archive", &["zip"])
+            .pick_file()
+        else {
+            return;
+        };
+
+        self.status = format!(
+            "Unpacking {}...",
+            zip_file.file_name().unwrap_or_default().to_string_lossy()
+        );
+        self.status_color = Color32::from_rgb(180, 210, 255);
+
+        match openhp1_package::install_from_zip(&zip_file, None) {
+            Ok(installation) => {
+                self.status = format!(
+                    "Successfully unpacked game files: {}",
+                    installation.root().display()
+                );
+                self.status_color = Color32::from_rgb(150, 210, 150);
+                self.installation = Some(installation);
+            }
             Err(error) => self.set_error(error),
         }
     }
@@ -168,20 +187,7 @@ impl eframe::App for Launcher {
                 self.language_selector(ui);
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
-                    ui.add_space(((ui.available_width() - 380.0) / 2.0).max(0.0));
-                    if ui
-                        .checkbox(
-                            &mut self.etc2_enabled,
-                            "ETC2 Texture Compression",
-                        )
-                        .changed()
-                    {
-                        let _ = save_openhp1_ini_values(&[(
-                            "OpenHP1.Renderer",
-                            "Etc2Compression",
-                            &self.etc2_enabled.to_string(),
-                        )]);
-                    }
+                    ui.add_space(((ui.available_width() - 150.0) / 2.0).max(0.0));
                     if ui
                         .checkbox(&mut self.touch_enabled, "Touch Controls")
                         .changed()
@@ -193,9 +199,9 @@ impl eframe::App for Launcher {
                         )]);
                     }
                 });
-                ui.add_space(12.0);
+                ui.add_space(14.0);
                 ui.horizontal(|ui| {
-                    ui.add_space((ui.available_width() - 456.0) / 2.0);
+                    ui.add_space(((ui.available_width() - 612.0) / 2.0).max(0.0));
                     let button_size = Vec2::new(144.0, 42.0);
                     if ui
                         .add_enabled(
@@ -207,10 +213,16 @@ impl eframe::App for Launcher {
                         self.play(&context);
                     }
                     if ui
-                        .add(egui::Button::new("Configure").min_size(button_size))
+                        .add(egui::Button::new("Choose Game Folder").min_size(button_size))
                         .clicked()
                     {
-                        self.configure();
+                        self.choose_game_folder();
+                    }
+                    if ui
+                        .add(egui::Button::new("Unpack ZIP Archive").min_size(button_size))
+                        .clicked()
+                    {
+                        self.unpack_zip();
                     }
                     if ui
                         .add(egui::Button::new("Exit").min_size(button_size))

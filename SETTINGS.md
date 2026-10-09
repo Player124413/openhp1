@@ -42,7 +42,7 @@ WindowSizeX=1280
 WindowSizeY=800
 Renderer=Classic
 DetailTextures=false
-Etc2Compression=false
+Etc2Compression=true
 
 [OpenHP1.Touch]
 Enabled=true
@@ -148,7 +148,7 @@ pipeline.
 | `WindowSizeY` | `800` | `320` to `8192` | Sets the height of the window when OpenHP1 starts. The window remains resizable. |
 | `Renderer` | `Classic` | `Classic`, `Modern` | Chooses the original-style or enhanced render pipeline. |
 | `DetailTextures` | `false` | `true`, `false` | Enables the original three-band close-range detail-texture overlay in both renderers. Macro textures remain enabled independently. |
-| `Etc2Compression` | `true` on Android, `false` otherwise | `true`, `false` | Enables hardware ETC2/EAC texture compression on supported GPUs, cutting texture memory by up to 8x and boosting mobile performance. |
+| `Etc2Compression` | `true` | `true`, `false` | Enables hardware ETC2/EAC texture compression on supported GPUs (enabled by default), cutting texture memory by up to 8x and boosting mobile performance. |
 
 Both values in a width and height pair must be valid. OpenHP1 limits each pair
 to no more total pixels than 3840x2160. If a pair is incomplete, invalid, or too
