@@ -72,7 +72,7 @@ impl AndroidLauncherApp {
         }
     }
 
-    fn try_auto_unpack(&mut self) -> Result<PathBuf> {
+    fn try_auto_unpack() -> Result<PathBuf> {
         let search_dirs = [
             PathBuf::from("/sdcard/Download"),
             PathBuf::from("/sdcard"),
@@ -92,7 +92,7 @@ impl AndroidLauncherApp {
                         if let Some(ext) = path.extension() {
                             if ext.eq_ignore_ascii_case("zip") {
                                 let inst = install_from_zip(&path, Some(&target_dest))?;
-                                return Ok(inst.root);
+                                return Ok(inst.root().to_path_buf());
                             }
                         }
                     }
@@ -410,7 +410,7 @@ impl ApplicationHandler for AndroidLauncherApp {
                 }
 
                 if action_unpack_zip {
-                    match self.try_auto_unpack() {
+                    match Self::try_auto_unpack() {
                         Ok(root) => {
                             let msg = match self.lang {
                                 AppLanguage::Russian => format!("Игра успешно распакована в:\n{}", root.display()),
