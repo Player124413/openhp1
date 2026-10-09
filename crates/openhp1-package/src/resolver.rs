@@ -72,7 +72,7 @@ pub fn configure_game_installation(
     configure_game_installation_with_settings_dir(root.as_ref(), language, &settings_dir())
 }
 
-fn configure_game_installation_with_settings_dir(
+pub fn configure_game_installation_with_settings_dir(
     root: &Path,
     language: Option<&str>,
     settings_dir: &Path,
