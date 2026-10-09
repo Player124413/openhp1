@@ -6,11 +6,12 @@ OpenHP1 requires the original game files to run.
 
 ## Supported Platforms
 
-| Platform  | OS Version     | Architecture             | Renderer   |
-|-----------|----------------|--------------------------|------------|
-| Windows   | 10 or higher   | `x86_64`, `ARM64`        | DirectX 12 |
-| macOS     | 11.0 or higher | `Intel`, `Apple Silicon` | Metal      |
-| Linux[^1] | 5.4 or higher  | `x86_64`, `aarch64`      | Vulkan     |
+| Platform  | OS Version     | Architecture             | Renderer        |
+|-----------|----------------|--------------------------|-----------------|
+| Windows   | 10 or higher   | `x86_64`, `ARM64`        | DirectX 12      |
+| macOS     | 11.0 or higher | `Intel`, `Apple Silicon` | Metal           |
+| Linux[^1] | 5.4 or higher  | `x86_64`, `aarch64`      | Vulkan          |
+| Android   | 7.0 or higher  | `aarch64`, `armv7`, `x86_64` | Vulkan / GLES 3 |
 
 [^1]: Linux kernel 5.4 or later and glibc 2.31 or later are recommended, along with a Vulkan-capable GPU with suitable drivers. Older systems may work as well; the provided binaries currently require glibc 2.18 or later.
 
@@ -126,6 +127,30 @@ To build the release versions for all platforms, install [`cross`](https://githu
 ```sh
 ./scripts/release.sh
 ```
+
+### Android Build & Touch Controls
+
+OpenHP1 features a first-class Android port with hardware-accelerated Vulkan/GLES rendering, full touchscreen controls, and ETC2 texture compression optimization.
+
+#### Building for Android
+
+Prerequisites: Android NDK and [`cargo-ndk`](https://github.com/bbqsrc/cargo-ndk).
+
+```sh
+./scripts/build-android.sh
+```
+
+Or open the `android/` directory directly in Android Studio.
+
+#### Touch Controls & Customization
+
+The game includes fully customizable virtual touch controls:
+- **Virtual Analog Stick**: smooth multi-directional movement and broom flight control.
+- **Action Buttons**: Cast spell, Jump/climb, Interact, Sneak, Broom Boost and Brake, Pause menu, and Console.
+- **Camera Look**: drag anywhere across the right half of the screen to smoothly rotate the camera.
+- **Customization Mode**: reposition any button by dragging, adjust button sizes with sliders, and toggle individual button visibility under **Options -> Touch Controls**.
+- **Touch Controls Toggle**: easily disable touch controls when playing with a physical gamepad or keyboard.
+- **ETC2 Optimization**: uses hardware Ericsson Texture Compression (ETC2/EAC) to reduce texture memory bandwidth by up to 8x and maximize battery life and FPS.
 
 ### Docs
 

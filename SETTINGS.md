@@ -11,6 +11,7 @@ it yourself.
 | Windows | `%APPDATA%\OpenHP1\OpenHP1.ini` |
 | macOS | `~/Library/Application Support/OpenHP1/OpenHP1.ini` |
 | Linux and other Unix systems | `$XDG_CONFIG_HOME/openhp1/OpenHP1.ini`, or `~/.config/openhp1/OpenHP1.ini` when `XDG_CONFIG_HOME` is not set |
+| Android | `/sdcard/Android/data/org.openhp1.game/files/OpenHP1.ini` or `/sdcard/OpenHP1/OpenHP1.ini` |
 
 If `OPENHP1_SETTINGS_DIR` is set, OpenHP1 uses that directory instead. This is
 mainly useful for portable installations and troubleshooting.
@@ -41,6 +42,48 @@ WindowSizeX=1280
 WindowSizeY=800
 Renderer=Classic
 DetailTextures=false
+Etc2Compression=false
+
+[OpenHP1.Touch]
+Enabled=true
+Opacity=0.75
+LookSensitivity=1.0
+StickX=0.150
+StickY=0.720
+StickRadius=64.0
+StickVisible=true
+CastX=0.880
+CastY=0.720
+CastSize=46.0
+CastVisible=true
+JumpX=0.770
+JumpY=0.820
+JumpSize=40.0
+JumpVisible=true
+InteractX=0.880
+InteractY=0.520
+InteractSize=36.0
+InteractVisible=true
+SneakX=0.150
+SneakY=0.420
+SneakSize=32.0
+SneakVisible=true
+BroomBoostX=0.760
+BroomBoostY=0.630
+BroomBoostSize=34.0
+BroomBoostVisible=true
+BroomBrakeX=0.760
+BroomBrakeY=0.470
+BroomBrakeSize=34.0
+BroomBrakeVisible=true
+MenuX=0.940
+MenuY=0.080
+MenuSize=26.0
+MenuVisible=true
+ConsoleX=0.060
+ConsoleY=0.080
+ConsoleSize=26.0
+ConsoleVisible=true
 
 [WinDrv.WindowsClient]
 ScreenFlashes=true
@@ -105,6 +148,7 @@ pipeline.
 | `WindowSizeY` | `800` | `320` to `8192` | Sets the height of the window when OpenHP1 starts. The window remains resizable. |
 | `Renderer` | `Classic` | `Classic`, `Modern` | Chooses the original-style or enhanced render pipeline. |
 | `DetailTextures` | `false` | `true`, `false` | Enables the original three-band close-range detail-texture overlay in both renderers. Macro textures remain enabled independently. |
+| `Etc2Compression` | `true` on Android, `false` otherwise | `true`, `false` | Enables hardware ETC2/EAC texture compression on supported GPUs, cutting texture memory by up to 8x and boosting mobile performance. |
 
 Both values in a width and height pair must be valid. OpenHP1 limits each pair
 to no more total pixels than 3840x2160. If a pair is incomplete, invalid, or too
@@ -161,6 +205,45 @@ These settings apply when `Renderer=Modern`.
 `AmbientOcclusion=GTAO` is accepted as a shorter name for `XeGTAO`. Older shared
 `Brightness` and `Contrast` values are used for the selected tone mapper when
 its named values are not present.
+
+## `[OpenHP1.Touch]`
+
+These settings configure the customizable on-screen touch overlay and virtual controls for Android and touch devices.
+
+| Key | Default | Accepted values | What it does |
+| --- | --- | --- | --- |
+| `Enabled` | `true` on Android, `false` otherwise | `true`, `false` | Enables or completely disables the virtual on-screen touch controls. |
+| `Opacity` | `0.75` | `0.1` to `1.0` | Controls visual transparency of all virtual buttons and stick. |
+| `LookSensitivity` | `1.0` | `0.2` to `5.0` | Multiplier for camera rotation when dragging across the screen. |
+| `StickX`, `StickY` | `0.150`, `0.720` | `0.02` to `0.98` | Normalized screen position of the virtual analog movement stick. |
+| `StickRadius` | `64.0` | `20.0` to `120.0` | Physical radius in pixels of the movement stick base. |
+| `StickVisible` | `true` | `true`, `false` | Controls visibility of the movement stick. |
+| `CastX`, `CastY` | `0.880`, `0.720` | `0.02` to `0.98` | Normalized screen position of the Cast Spell button. |
+| `CastSize` | `46.0` | `16.0` to `100.0` | Radius in pixels of the Cast Spell button. |
+| `CastVisible` | `true` | `true`, `false` | Controls visibility of the Cast Spell button. |
+| `JumpX`, `JumpY` | `0.770`, `0.820` | `0.02` to `0.98` | Normalized screen position of the Jump button. |
+| `JumpSize` | `40.0` | `16.0` to `100.0` | Radius in pixels of the Jump button. |
+| `JumpVisible` | `true` | `true`, `false` | Controls visibility of the Jump button. |
+| `InteractX`, `InteractY` | `0.880`, `0.520` | `0.02` to `0.98` | Normalized screen position of the Use / Interact button. |
+| `InteractSize` | `36.0` | `16.0` to `100.0` | Radius in pixels of the Use / Interact button. |
+| `InteractVisible` | `true` | `true`, `false` | Controls visibility of the Use / Interact button. |
+| `SneakX`, `SneakY` | `0.150`, `0.420` | `0.02` to `0.98` | Normalized screen position of the Walk / Sneak button. |
+| `SneakSize` | `32.0` | `16.0` to `100.0` | Radius in pixels of the Walk / Sneak button. |
+| `SneakVisible` | `true` | `true`, `false` | Controls visibility of the Walk / Sneak button. |
+| `BroomBoostX`, `BroomBoostY` | `0.760`, `0.630` | `0.02` to `0.98` | Normalized screen position of the Broom Boost button. |
+| `BroomBoostSize` | `34.0` | `16.0` to `100.0` | Radius in pixels of the Broom Boost button. |
+| `BroomBoostVisible` | `true` | `true`, `false` | Controls visibility of the Broom Boost button. |
+| `BroomBrakeX`, `BroomBrakeY` | `0.760`, `0.470` | `0.02` to `0.98` | Normalized screen position of the Broom Brake button. |
+| `BroomBrakeSize` | `34.0` | `16.0` to `100.0` | Radius in pixels of the Broom Brake button. |
+| `BroomBrakeVisible` | `true` | `true`, `false` | Controls visibility of the Broom Brake button. |
+| `MenuX`, `MenuY` | `0.940`, `0.080` | `0.02` to `0.98` | Normalized screen position of the Pause Menu button. |
+| `MenuSize` | `26.0` | `16.0` to `100.0` | Radius in pixels of the Pause Menu button. |
+| `MenuVisible` | `true` | `true`, `false` | Controls visibility of the Pause Menu button. |
+| `ConsoleX`, `ConsoleY` | `0.060`, `0.080` | `0.02` to `0.98` | Normalized screen position of the Console button. |
+| `ConsoleSize` | `26.0` | `16.0` to `100.0` | Radius in pixels of the Console button. |
+| `ConsoleVisible` | `true` | `true`, `false` | Controls visibility of the Console button. |
+
+You can also customize button positions and sizes visually by tapping **Options -> Touch Controls -> Edit On-Screen Controls** in the in-game menu or launcher. In edit mode, drag any button to move it across the screen, or select it to adjust its size with the slider.
 
 ## Recovering from a bad setting
 

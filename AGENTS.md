@@ -72,6 +72,16 @@ committed copies.
   package data.
 - `openhp1-game` owns its winit/wgpu event loop. Do not make eframe own the game
   loop, raw input, cursor grabbing, fullscreen behavior, or frame scheduling.
+  On Android, it builds as a `cdylib` library with `android_main` using
+  `android-activity`, integrating touch controls, mobile lifecycle, and
+  standard storage paths.
+- Touch controls and custom button layout editing belong in
+  `openhp1-game/src/app/touch.rs`, providing an interactive visual editor,
+  visibility and size customization, stick displacement mapping, and a setting
+  to disable touch controls completely.
+- Hardware ETC2 / EAC texture compression encoding belongs in
+  `openhp1-texture/src/etc2.rs` and is consumed by `openhp1-render` to optimize
+  mobile GPU memory footprint and bandwidth.
 - Use `kira` for PCM playback, mixing, spatial sound, and streaming. Keep
   package decoding and platform playback in `openhp1-audio`, and keep the
   original game's playback policy in the runtime and game.
