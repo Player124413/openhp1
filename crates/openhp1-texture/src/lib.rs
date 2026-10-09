@@ -1,12 +1,18 @@
 //! Decoders for the paletted UE1 textures used by Harry Potter 1.
 
 mod decode;
+pub mod etc2;
 mod error;
 mod fire;
 mod palette;
 mod texture;
 
 pub use error::{Error, Result};
+pub use etc2::{
+    compress_eac_alpha_block, compress_etc2_rgb, compress_etc2_rgb_block, compress_etc2_rgba,
+    compress_etc2_rgba_block, decompress_eac_alpha_block, decompress_etc2_rgb_block,
+    decompress_etc2_rgba_block,
+};
 pub use fire::{FireAnimation, FireRng, FireSpark, FireTexture};
 pub use palette::{Color, Palette};
 pub use texture::{
