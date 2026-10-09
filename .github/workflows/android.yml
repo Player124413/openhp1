@@ -75,13 +75,17 @@ jobs:
           chmod +x ./scripts/build-android.sh
           BUILD_ALL_ABIS=1 ./scripts/build-android.sh 2>&1 | tee build.log
 
-      - name: Output Build Summary on Failure
-        if: failure()
+      - name: Save and Push Build Log
+        if: always()
         run: |
-          echo "### Build Failure Log" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          tail -n 120 build.log >> "$GITHUB_STEP_SUMMARY" || true
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan ci-debug || git checkout -B ci-debug
+          git rm -rf . || true
+          cp build.log ci-build.log || echo "no build.log" > ci-build.log
+          git add ci-build.log
+          git commit -m "CI Build Log" || true
+          git push -f origin ci-debug || true
 
       - name: Verify and List APK
         run: |
