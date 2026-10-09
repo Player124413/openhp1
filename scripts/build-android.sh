@@ -65,7 +65,7 @@ build_target() {
     info "Building for $abi ($target)..."
 
     if command -v cargo-ndk >/dev/null 2>&1; then
-        cargo ndk -t "$abi" -o "$JNI_LIBS_DIR" build -p openhp1-game "${cargo_flags[@]}"
+        cargo ndk -t "$abi" --platform 26 -o "$JNI_LIBS_DIR" build -p openhp1-game "${cargo_flags[@]}"
     else
         cargo build --target "$target" -p openhp1-game "${cargo_flags[@]}"
     fi
