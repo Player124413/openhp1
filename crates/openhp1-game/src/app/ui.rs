@@ -1180,6 +1180,7 @@ impl GameUi {
                 .unwrap_or(5.1);
         let graphics = options.graphics;
         let gameplay = options.gameplay;
+        let touch = options.touch;
         let options = OptionValues {
             mouse_speed: ((mouse_sensitivity - 0.2) / 9.8).clamp(0.0, 1.0),
             music_volume: options.music_volume,
@@ -1223,7 +1224,7 @@ impl GameUi {
             options,
             graphics,
             gameplay,
-            touch: options.touch,
+            touch,
             open_combo: None,
             game_root: game_root.to_path_buf(),
             settings_dir: settings_dir.to_path_buf(),

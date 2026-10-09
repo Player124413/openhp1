@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use egui::{
-    Align2, Color32, CornerRadius, FontId, Id, LayerId, Order, Pos2, Rect, Sense, Stroke, Vec2,
+    Align2, Color32, CornerRadius, FontId, Id, LayerId, Order, Pos2, Rect, Stroke, StrokeKind, Vec2,
 };
 use openhp1_runtime::{ConsoleCommands, PlayerInput};
 use winit::event::{Touch, TouchPhase};
@@ -812,6 +812,7 @@ impl TouchController {
                 look_rect.shrink(8.0),
                 CornerRadius::same(12),
                 Stroke::new(1.0, Color32::from_rgba_unmultiplied(100, 140, 200, (alpha / 8).max(10))),
+                StrokeKind::Inside,
             );
         }
 
