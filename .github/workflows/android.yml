@@ -74,13 +74,15 @@ jobs:
           set -o pipefail
           export PATH="/opt/gradle/gradle-8.5/bin:$PATH"
           chmod +x ./scripts/build-android.sh
-          if ! BUILD_ALL_ABIS=1 ./scripts/build-android.sh 2>&1 | tee build.log; then
-            echo "### Build Failed" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            tail -n 100 build.log >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          fi
+          BUILD_ALL_ABIS=1 ./scripts/build-android.sh 2>&1 | tee build.log
+
+      - name: Report failure log
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tail -n 80 build.log > fail.txt || true
+          gh api /repos/${{ github.repository }}/commits/${{ github.sha }}/comments -f body="$(cat fail.txt)" || true
 
       - name: Verify and List APK
         run: |
