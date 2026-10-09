@@ -46,10 +46,10 @@ else
 fi
 
 build_mode="release"
-cargo_flags=("--release" "--ignore-rust-version")
+cargo_flags=("--release")
 if [[ "${1:-}" == "--debug" ]]; then
     build_mode="debug"
-    cargo_flags=("--ignore-rust-version")
+    cargo_flags=()
 fi
 
 mkdir -p "$JNI_LIBS_DIR/arm64-v8a"
@@ -65,10 +65,9 @@ build_target() {
     info "Building for $abi ($target)..."
 
     if command -v cargo-ndk >/dev/null 2>&1; then
-        cargo ndk --target "$target" --platform 24 -o "$JNI_LIBS_DIR" build --package openhp1-game "${cargo_flags[@]}" || \
-        cargo ndk --target "$target" --platform 24 build --package openhp1-game "${cargo_flags[@]}"
+        cargo ndk -t "$abi" -o "$JNI_LIBS_DIR" build -p openhp1-game "${cargo_flags[@]}"
     else
-        cargo build --target "$target" --package openhp1-game "${cargo_flags[@]}"
+        cargo build --target "$target" -p openhp1-game "${cargo_flags[@]}"
     fi
 
     local src_lib="$REPO_ROOT/target/$target/$build_mode/libopenhp1_game.so"

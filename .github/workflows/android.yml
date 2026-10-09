@@ -63,12 +63,25 @@ jobs:
       - name: Build Android Libraries and APK
         run: |
           chmod +x ./scripts/build-android.sh
-          BUILD_ALL_ABIS=1 ./scripts/build-android.sh
+          BUILD_ALL_ABIS=1 ./scripts/build-android.sh 2>&1 | tee build.log
+
+      - name: Output Build Summary on Failure
+        if: failure()
+        run: |
+          echo "### Build Failure Log" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 120 build.log >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify APK
         run: |
           echo "Checking built APK files..."
           ls -la android/app/build/outputs/apk/release/ || ls -la android/app/build/outputs/apk/debug/ || true
+          echo "### Build Success" >> "$GITHUB_STEP_SUMMARY"
+          echo "APK successfully generated:" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          find android/app/build/outputs/apk -name "*.apk" -ls >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
