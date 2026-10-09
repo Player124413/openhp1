@@ -16,6 +16,7 @@ use openhp1_texture::{Palette, Texture};
 use super::{
     gameplay_settings::GameplaySettings,
     graphics_settings::{ColorDepth, GraphicsSettings, RESOLUTION_PRESETS},
+    touch::TouchSettings,
 };
 
 const REFERENCE_SIZE: Vec2 = Vec2::new(640.0, 480.0);
@@ -239,6 +240,8 @@ pub(super) enum Action {
     ApplyGraphics(GraphicsSettings),
     SaveGraphics(GraphicsSettings),
     SaveGameplay(GameplaySettings),
+    SaveTouch(TouchSettings),
+    OpenTouchEditor,
     SetMouseSensitivity(f32),
     SetMusicVolume(u8),
     SetSoundVolume(u8),
@@ -249,6 +252,7 @@ pub(super) enum Action {
 pub(super) struct OptionsState {
     pub(super) graphics: GraphicsSettings,
     pub(super) gameplay: GameplaySettings,
+    pub(super) touch: TouchSettings,
     pub(super) music_volume: f32,
     pub(super) sound_volume: f32,
 }
@@ -260,6 +264,7 @@ enum Page {
     Options,
     Graphics,
     Gameplay,
+    TouchControls,
     Quidditch,
     Report,
     Folio,
@@ -584,6 +589,7 @@ pub(super) struct GameUi {
     options: OptionValues,
     graphics: GraphicsSettings,
     gameplay: GameplaySettings,
+    pub(super) touch: TouchSettings,
     open_combo: Option<usize>,
     game_root: PathBuf,
     settings_dir: PathBuf,
@@ -1217,6 +1223,7 @@ impl GameUi {
             options,
             graphics,
             gameplay,
+            touch: options.touch,
             open_combo: None,
             game_root: game_root.to_path_buf(),
             settings_dir: settings_dir.to_path_buf(),
@@ -1259,10 +1266,11 @@ impl GameUi {
     pub(super) fn escape(&mut self) -> bool {
         self.confirm_exit = false;
         self.confirm_quit_game = false;
-        if matches!(self.page, Page::Graphics | Page::Gameplay) {
+        if matches!(self.page, Page::Graphics | Page::Gameplay | Page::TouchControls) {
             let action = match self.page {
                 Page::Graphics => Action::SaveGraphics(self.graphics),
                 Page::Gameplay => Action::SaveGameplay(self.gameplay),
+                Page::TouchControls => Action::SaveTouch(self.touch.clone()),
                 _ => unreachable!(),
             };
             self.page = Page::Options;
@@ -1357,6 +1365,7 @@ impl GameUi {
             Page::Options => &self.textures.options_background,
             Page::Graphics => &self.textures.options_background,
             Page::Gameplay => &self.textures.options_background,
+            Page::TouchControls => &self.textures.options_background,
             Page::Quidditch => &self.textures.quidditch_background,
             Page::Report => &self.textures.report_background,
             Page::Folio if self.folio_page == 6 => &self.textures.folio_harry_background,
@@ -1392,6 +1401,7 @@ impl GameUi {
                     Page::Options => self.options_page(ui, scale),
                     Page::Graphics => self.graphics_page(ui, scale),
                     Page::Gameplay => self.gameplay_page(ui, scale),
+                    Page::TouchControls => self.touch_controls_page(ui, scale),
                     Page::Quidditch => self.quidditch_page(ui, scale),
                     Page::Report => self.report_page(ui, scale),
                     Page::Folio => self.folio_page(ui, scale),
@@ -1816,6 +1826,10 @@ impl GameUi {
         option_label(ui, scale, 45.0, 165.0, "Gameplay Tweaks", PURPLE);
         if option_button(ui, scale, 159.0, 165.0, &self.textures.option_bar, "Open") {
             self.page = Page::Gameplay;
+        }
+        option_label(ui, scale, 45.0, 205.0, "Touch Controls", PURPLE);
+        if option_button(ui, scale, 159.0, 205.0, &self.textures.option_bar, "Open") {
+            self.page = Page::TouchControls;
         }
         option_label(
             ui,
@@ -2341,6 +2355,135 @@ impl GameUi {
         ) {
             self.page = Page::Options;
             self.action = Some(Action::SaveGameplay(self.gameplay));
+        }
+    }
+
+    fn touch_controls_page(&mut self, ui: &mut egui::Ui, scale: f32) {
+        const PURPLE: Color32 = Color32::from_rgb(96, 0, 96);
+        const BLUE: Color32 = Color32::from_rgb(20, 60, 210);
+        const LABEL: Color32 = Color32::from_rgb(50, 40, 120);
+
+        page_title(ui, scale, 27.0, "Touch Controls", PURPLE);
+
+        // 1. Enable / Disable toggle
+        let enabled = self.touch.enabled;
+        if option_checkbox(
+            ui,
+            scale,
+            45.0,
+            68.0,
+            &self.textures.checkbox_off,
+            &self.textures.checkbox_on,
+            "Enable Touch Controls",
+            LABEL,
+            enabled,
+        ) {
+            self.touch.enabled = !enabled;
+            self.action = Some(Action::SaveTouch(self.touch.clone()));
+        }
+
+        // 2. Customize Layout / Move buttons
+        option_label(ui, scale, 45.0, 105.0, "Customize Layout", PURPLE);
+        if option_button(ui, scale, 175.0, 105.0, &self.textures.option_bar, "Edit On-Screen Controls") {
+            self.action = Some(Action::OpenTouchEditor);
+            self.open = false;
+        }
+
+        // 3. Opacity slider
+        option_label(ui, scale, 45.0, 142.0, "Controls Opacity", PURPLE);
+        let mut opacity_val = ((self.touch.opacity - 0.2) / 0.8).clamp(0.0, 1.0);
+        if option_slider(
+            ui,
+            scale,
+            175.0,
+            142.0,
+            &self.textures.slider_track,
+            &self.textures.slider_knob,
+            &mut opacity_val,
+        ) {
+            self.touch.opacity = 0.2 + opacity_val * 0.8;
+            self.action = Some(Action::SaveTouch(self.touch.clone()));
+        }
+
+        // 4. Look Sensitivity slider
+        option_label(ui, scale, 45.0, 178.0, "Look Sensitivity", PURPLE);
+        let mut sens_val = ((self.touch.look_sensitivity - 0.2) / 2.8).clamp(0.0, 1.0);
+        if option_slider(
+            ui,
+            scale,
+            175.0,
+            178.0,
+            &self.textures.slider_track,
+            &self.textures.slider_knob,
+            &mut sens_val,
+        ) {
+            self.touch.look_sensitivity = 0.2 + sens_val * 2.8;
+            self.action = Some(Action::SaveTouch(self.touch.clone()));
+        }
+
+        // 5. Button Visibility options
+        option_text(ui, scale, 172.0, 212.0, "Button Visibility", BLUE);
+
+        let toggles = [
+            ("Move Stick", 45.0, 235.0, self.touch.stick.visible, 0),
+            ("Cast Spell", 45.0, 268.0, self.touch.cast.visible, 1),
+            ("Jump / Climb", 45.0, 301.0, self.touch.jump.visible, 2),
+            ("Use / Interact", 45.0, 334.0, self.touch.interact.visible, 3),
+            ("Walk / Sneak", 310.0, 235.0, self.touch.sneak.visible, 4),
+            ("Broom Boost/Brake", 310.0, 268.0, self.touch.broom_boost.visible, 5),
+            ("Pause Menu", 310.0, 301.0, self.touch.menu.visible, 6),
+            ("Console (~)", 310.0, 334.0, self.touch.console.visible, 7),
+        ];
+
+        for (label, x, y, visible, idx) in toggles {
+            if option_checkbox(
+                ui,
+                scale,
+                x,
+                y,
+                &self.textures.checkbox_off,
+                &self.textures.checkbox_on,
+                label,
+                LABEL,
+                visible,
+            ) {
+                match idx {
+                    0 => self.touch.stick.visible = !visible,
+                    1 => self.touch.cast.visible = !visible,
+                    2 => self.touch.jump.visible = !visible,
+                    3 => self.touch.interact.visible = !visible,
+                    4 => self.touch.sneak.visible = !visible,
+                    5 => {
+                        self.touch.broom_boost.visible = !visible;
+                        self.touch.broom_brake.visible = !visible;
+                    }
+                    6 => self.touch.menu.visible = !visible,
+                    7 => self.touch.console.visible = !visible,
+                    _ => {}
+                }
+                self.action = Some(Action::SaveTouch(self.touch.clone()));
+            }
+        }
+
+        // Reset Defaults button
+        option_label(ui, scale, 45.0, 375.0, "Reset Layout", PURPLE);
+        if option_button(ui, scale, 175.0, 375.0, &self.textures.option_bar, "Reset Defaults") {
+            self.touch.reset_defaults();
+            self.action = Some(Action::SaveTouch(self.touch.clone()));
+        }
+
+        // Back button
+        if textured_button(
+            ui,
+            scale,
+            565.0,
+            431.0,
+            &self.textures.back,
+            &self.textures.back_hover,
+            "",
+        ) {
+            self.page = Page::Options;
+            self.action = Some(Action::SaveTouch(self.touch.clone()));
         }
     }
 
@@ -4115,6 +4258,7 @@ mod tests {
             OptionsState {
                 graphics: GraphicsSettings::default(),
                 gameplay: GameplaySettings::default(),
+                touch: TouchSettings::default(),
                 music_volume: 1.0,
                 sound_volume: 1.0,
             },

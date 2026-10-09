@@ -37,6 +37,7 @@ use self::{
     gameplay_settings::GameplaySettings,
     graphics_settings::{ColorDepth, GraphicsSettings, RESOLUTION_PRESETS, window_size},
     presentation::Presentation,
+    touch::{TouchController, TouchEditorState, TouchSettings},
     ui::GameUi,
 };
 
@@ -44,13 +45,14 @@ mod console;
 mod gameplay_settings;
 mod graphics_settings;
 mod presentation;
+pub mod touch;
 mod ui;
 
 const ROTATOR_RADIANS: f32 = TAU / 65_536.0;
 const DEBUG_FAST_FORWARD_TICKS: usize = 16;
 const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
 
-pub(crate) struct GameApp {
+pub struct GameApp {
     scene: Option<LoadedScene>,
     graphics: Option<Graphics>,
     renderer_override: Option<RendererSettings>,
@@ -58,7 +60,7 @@ pub(crate) struct GameApp {
 }
 
 impl GameApp {
-    pub(crate) fn new(scene: LoadedScene, renderer_override: Option<RendererSettings>) -> Self {
+    pub fn new(scene: LoadedScene, renderer_override: Option<RendererSettings>) -> Self {
         Self {
             scene: Some(scene),
             graphics: None,
@@ -263,6 +265,24 @@ impl ApplicationHandler for GameApp {
                     }
                 }
                 _ => {}
+            }
+            return;
+        }
+        if let WindowEvent::Touch(touch) = &event {
+            let size = [graphics.config.width as f32, graphics.config.height as f32];
+            graphics.touch.handle_touch(
+                touch,
+                size,
+                &graphics.touch_settings,
+                &mut graphics.touch_editor,
+            );
+            if graphics.touch.menu_requested() {
+                graphics.release_input();
+                graphics.game_ui.open_pause();
+            }
+            if graphics.touch.console_requested() {
+                graphics.debug_console.toggle();
+                graphics.release_input();
             }
             return;
         }
@@ -550,6 +570,9 @@ struct Graphics {
     cutscene_skip: CutsceneSkipState,
     gameplay_settings: GameplaySettings,
     graphics_settings: GraphicsSettings,
+    touch: TouchController,
+    touch_settings: TouchSettings,
+    touch_editor: TouchEditorState,
     display_settings: DisplaySettings,
     screen_flash: [f32; 4],
 }
@@ -752,8 +775,16 @@ impl Graphics {
             ..Default::default()
         }))
         .context("failed to find a compatible graphics adapter")?;
+        let mut required_features = wgpu::Features::empty();
+        if adapter
+            .features()
+            .contains(wgpu::Features::TEXTURE_COMPRESSION_ETC2)
+        {
+            required_features |= wgpu::Features::TEXTURE_COMPRESSION_ETC2;
+        }
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("OpenHP1 game device"),
+            required_features,
             ..Default::default()
         }))
         .context("failed to create the graphics device")?;
@@ -796,6 +827,7 @@ impl Graphics {
             Some(device.limits().max_texture_dimension_2d as usize),
         );
         let egui_renderer = egui_wgpu::Renderer::new(&device, config.format, Default::default());
+        let touch_settings = TouchSettings::load(&console);
         let game_ui = GameUi::load(
             &egui_context,
             &game_root,
@@ -805,6 +837,7 @@ impl Graphics {
             ui::OptionsState {
                 graphics: graphics_settings,
                 gameplay: gameplay_settings,
+                touch: touch_settings.clone(),
                 music_volume,
                 sound_volume,
             },
@@ -846,6 +879,9 @@ impl Graphics {
             cutscene_skip: CutsceneSkipState::Inactive,
             gameplay_settings,
             graphics_settings,
+            touch: TouchController::new(),
+            touch_settings,
+            touch_editor: TouchEditorState::default(),
             display_settings,
             screen_flash: player_view.flash_fog,
         })
@@ -919,6 +955,9 @@ impl Graphics {
         } else {
             self.input.player_input(delta_time)
         };
+        self.touch
+            .apply_to_player_input(&mut input, delta_time, &self.touch_settings);
+        self.touch.reset_frame_triggers();
         if !self.gameplay_settings.jump_skips_cutscenes {
             self.cutscene_skip = CutsceneSkipState::Inactive;
         } else if self.cutscene_skip == CutsceneSkipState::Inactive && input.jump {
@@ -1028,6 +1067,15 @@ impl Graphics {
             self.game_ui.ui(ui.ctx());
             self.debug_overlay(ui.ctx());
             self.debug_console.ui(ui);
+            if !self.game_ui.is_open() || self.touch_editor.is_active {
+                let size = [self.config.width as f32, self.config.height as f32];
+                self.touch.render(
+                    ui.ctx(),
+                    size,
+                    &mut self.touch_settings,
+                    &mut self.touch_editor,
+                );
+            }
         });
         self.run_debug_console_commands();
         self.egui
@@ -1124,6 +1172,10 @@ impl Graphics {
                 self.last_error = Some(format!("could not save screenshot: {error}"));
             }
         }
+        if self.touch_editor.needs_save {
+            self.touch_editor.needs_save = false;
+            let _ = self.touch_settings.save(&self.console);
+        }
         match self.game_ui.take_action() {
             Some(ui::Action::Exit) => RenderOutcome::Exit,
             Some(ui::Action::LoadSave(slot)) => match self.open_save(slot) {
@@ -1200,6 +1252,18 @@ impl Graphics {
                 if let Err(error) = settings.save(&self.console) {
                     self.last_error = Some(format!("could not save gameplay settings: {error}"));
                 }
+                RenderOutcome::Continue
+            }
+            Some(ui::Action::SaveTouch(settings)) => {
+                self.touch_settings = settings;
+                if let Err(error) = self.touch_settings.save(&self.console) {
+                    self.last_error = Some(format!("could not save touch settings: {error}"));
+                }
+                RenderOutcome::Continue
+            }
+            Some(ui::Action::OpenTouchEditor) => {
+                self.touch_editor.is_active = true;
+                self.release_input();
                 RenderOutcome::Continue
             }
             Some(ui::Action::SetMusicVolume(volume)) => {

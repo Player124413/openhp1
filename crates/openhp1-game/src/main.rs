@@ -1,5 +1,3 @@
-mod app;
-
 use std::{
     env,
     ffi::OsString,
@@ -10,7 +8,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use app::GameApp;
+use openhp1_game::GameApp;
 use openhp1_package::{resolve_game_installation, settings_dir};
 use openhp1_render::RendererSettings;
 use openhp1_scene::LoadedScene;

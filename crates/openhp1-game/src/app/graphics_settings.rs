@@ -95,6 +95,14 @@ impl GraphicsSettings {
         )
         .and_then(|value| parse_bool(&value))
         .unwrap_or(renderer.detail_textures);
+        renderer.etc2_compression = config(
+            console,
+            RENDERER_SECTION,
+            "Etc2Compression",
+            "Etc2Compression",
+        )
+        .and_then(|value| parse_bool(&value))
+        .unwrap_or(renderer.etc2_compression);
         renderer.crt_effect = config(console, CLASSIC_SECTION, "CRTEffect", "CRTEffect")
             .and_then(|value| parse_bool(&value))
             .unwrap_or(renderer.crt_effect);
@@ -212,6 +220,7 @@ impl GraphicsSettings {
                 ("WindowSizeY", self.window_size[1].to_string()),
                 ("Renderer", renderer_name(self.renderer.mode).to_owned()),
                 ("DetailTextures", self.renderer.detail_textures.to_string()),
+                ("Etc2Compression", self.renderer.etc2_compression.to_string()),
             ],
         )?;
         console.save_config_values(
