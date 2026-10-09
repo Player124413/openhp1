@@ -74,7 +74,13 @@ jobs:
           set -o pipefail
           export PATH="/opt/gradle/gradle-8.5/bin:$PATH"
           chmod +x ./scripts/build-android.sh
-          BUILD_ALL_ABIS=1 ./scripts/build-android.sh
+          if ! BUILD_ALL_ABIS=1 ./scripts/build-android.sh 2>&1 | tee build.log; then
+            echo "### Build Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -n 100 build.log >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
       - name: Verify and List APK
         run: |
