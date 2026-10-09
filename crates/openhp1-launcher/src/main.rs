@@ -2,14 +2,17 @@ use std::{path::PathBuf, process::Command};
 
 use anyhow::{Context, Result, anyhow, bail};
 use eframe::egui::{self, Color32, RichText, TextureHandle, Vec2};
-use openhp1_package::{GameInstallation, configure_game_installation, resolve_game_installation};
+use openhp1_package::{
+    GameInstallation, configure_game_installation, read_openhp1_ini_value,
+    resolve_game_installation, save_openhp1_ini_values,
+};
 
 const SPLASH: &[u8] = include_bytes!("../../../splash.jpg");
 
 fn main() -> Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([724.0, 690.0])
+            .with_inner_size([724.0, 740.0])
             .with_resizable(false),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
@@ -27,6 +30,8 @@ struct Launcher {
     installation: Option<GameInstallation>,
     status: String,
     status_color: Color32,
+    etc2_enabled: bool,
+    touch_enabled: bool,
 }
 
 impl Launcher {
@@ -47,11 +52,27 @@ impl Launcher {
             }
             Err(error) => (None, error.to_string(), Color32::from_rgb(235, 185, 110)),
         };
+        let etc2_enabled = read_openhp1_ini_value("OpenHP1.Renderer", "Etc2Compression")
+            .map(|v| match v.trim().to_ascii_lowercase().as_str() {
+                "true" | "1" | "on" => true,
+                "false" | "0" | "off" => false,
+                _ => cfg!(target_os = "android"),
+            })
+            .unwrap_or(cfg!(target_os = "android"));
+        let touch_enabled = read_openhp1_ini_value("OpenHP1.Touch", "Enabled")
+            .map(|v| match v.trim().to_ascii_lowercase().as_str() {
+                "true" | "1" | "on" => true,
+                "false" | "0" | "off" => false,
+                _ => cfg!(target_os = "android"),
+            })
+            .unwrap_or(cfg!(target_os = "android"));
         Ok(Self {
             splash,
             installation,
             status,
             status_color,
+            etc2_enabled,
+            touch_enabled,
         })
     }
 
@@ -145,7 +166,34 @@ impl eframe::App for Launcher {
                 ui.label(RichText::new(&self.status).color(self.status_color));
                 ui.add_space(8.0);
                 self.language_selector(ui);
-                ui.add_space(14.0);
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.add_space(((ui.available_width() - 380.0) / 2.0).max(0.0));
+                    if ui
+                        .checkbox(
+                            &mut self.etc2_enabled,
+                            "ETC2 Texture Compression",
+                        )
+                        .changed()
+                    {
+                        let _ = save_openhp1_ini_values(&[(
+                            "OpenHP1.Renderer",
+                            "Etc2Compression",
+                            &self.etc2_enabled.to_string(),
+                        )]);
+                    }
+                    if ui
+                        .checkbox(&mut self.touch_enabled, "Touch Controls")
+                        .changed()
+                    {
+                        let _ = save_openhp1_ini_values(&[(
+                            "OpenHP1.Touch",
+                            "Enabled",
+                            &self.touch_enabled.to_string(),
+                        )]);
+                    }
+                });
+                ui.add_space(12.0);
                 ui.horizontal(|ui| {
                     ui.add_space((ui.available_width() - 456.0) / 2.0);
                     let button_size = Vec2::new(144.0, 42.0);
