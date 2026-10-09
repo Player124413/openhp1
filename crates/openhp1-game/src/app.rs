@@ -276,19 +276,10 @@ impl ApplicationHandler for GameApp {
                 graphics.config.width as f32 / scale.max(0.1),
                 graphics.config.height as f32 / scale.max(0.1),
             ];
-            let logical_touch = winit::event::Touch {
-                device_id: touch.device_id,
-                phase: touch.phase,
-                location: winit::dpi::PhysicalPosition::new(
-                    touch.location.x / scale as f64,
-                    touch.location.y / scale as f64,
-                ),
-                force: touch.force,
-                id: touch.id,
-            };
             graphics.touch.handle_touch(
-                &logical_touch,
+                touch,
                 logical_size,
+                scale,
                 &graphics.touch_settings,
                 &mut graphics.touch_editor,
             );
@@ -826,12 +817,10 @@ impl Graphics {
         config.usage |= wgpu::TextureUsages::COPY_SRC;
         surface.configure(&device, &config);
         #[cfg(target_os = "android")]
-        let mut graphics_settings = graphics_settings;
-        #[cfg(target_os = "android")]
-        {
-            graphics_settings.resolution = [config.width, config.height];
-        }
-        let presentation = Presentation::new(&device, config.format, graphics_settings.resolution);
+        let resolution = [config.width, config.height];
+        #[cfg(not(target_os = "android"))]
+        let resolution = graphics_settings.resolution;
+        let presentation = Presentation::new(&device, config.format, resolution);
         let renderer = Renderer::new_with_settings(
             &device,
             &queue,

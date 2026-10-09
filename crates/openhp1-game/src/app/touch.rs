@@ -439,6 +439,7 @@ impl TouchController {
         &mut self,
         touch: &Touch,
         screen_size: [f32; 2],
+        scale_factor: f32,
         settings: &TouchSettings,
         editor: &mut TouchEditorState,
     ) {
@@ -446,7 +447,11 @@ impl TouchController {
             return;
         }
 
-        let pos = Pos2::new(touch.location.x as f32, touch.location.y as f32);
+        let scale = scale_factor.max(0.1);
+        let pos = Pos2::new(
+            touch.location.x as f32 / scale,
+            touch.location.y as f32 / scale,
+        );
 
         if editor.is_active {
             self.handle_editor_touch(touch, pos, screen_size, settings, editor);
