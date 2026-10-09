@@ -18,8 +18,8 @@ pub use object::{ObjectReader, ObjectStack, PropertyKind, PropertyTag};
 pub use package::Package;
 pub use resolver::{
     ConfigEntry, GameInstallation, GameInstallationError, PackageStore, ResolveError,
-    ResolveResult, ResolvedObject, configure_game_installation, resolve_game_installation,
-    settings_dir, write_derived_file_atomically,
+    ResolveResult, ResolvedObject, configure_game_installation, read_openhp1_ini_value,
+    resolve_game_installation, save_openhp1_ini_values, settings_dir, write_derived_file_atomically,
 };
 pub use summary::{
     Export, Generation, HeaderHistory, Import, NameEntry, ObjectReference, PackageHeader,

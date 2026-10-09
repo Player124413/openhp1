@@ -222,6 +222,32 @@ fn write_game_installation(
     .map_err(GameInstallationError::Settings)
 }
 
+pub fn read_openhp1_ini_value(section: &str, key: &str) -> Option<String> {
+    let settings = settings_dir();
+    let contents = read_openhp1_ini(&settings).ok().flatten()?;
+    ini_values(&contents, section, key).into_iter().next()
+}
+
+pub fn save_openhp1_ini_values(entries: &[(&str, &str, &str)]) -> Result<(), GameInstallationError> {
+    let settings = settings_dir();
+    let path = settings.join(OPENHP1_CONFIG);
+    let contents = match fs::read_to_string(&path) {
+        Ok(contents) => contents,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(source) => return Err(GameInstallationError::Io { path, source }),
+    };
+    let update_entries = entries
+        .iter()
+        .map(|(section, key, value)| ConfigEntry {
+            section: (*section).to_owned(),
+            key: (*key).to_owned(),
+            values: vec![(*value).to_owned()],
+        })
+        .collect::<Vec<_>>();
+    write_ini_atomically(&path, update_ini(&contents, &update_entries))
+        .map_err(GameInstallationError::Settings)
+}
+
 fn read_openhp1_ini(settings_dir: &Path) -> std::io::Result<Option<String>> {
     match fs::read_to_string(settings_dir.join(OPENHP1_CONFIG)) {
         Ok(contents) => Ok(Some(contents)),
@@ -252,6 +278,20 @@ fn inferred_game_roots() -> Result<Vec<PathBuf>, GameInstallationError> {
                     .join("Harry Potter TM"),
             );
         }
+    }
+    #[cfg(target_os = "android")]
+    for path in [
+        "/sdcard/OpenHP1",
+        "/sdcard/openhp1",
+        "/sdcard/HarryPotter",
+        "/sdcard/Harry Potter",
+        "/storage/emulated/0/OpenHP1",
+        "/storage/emulated/0/openhp1",
+        "/storage/emulated/0/HarryPotter",
+        "/storage/emulated/0/Android/data/org.openhp1.game/files",
+        "/data/data/org.openhp1.game/files",
+    ] {
+        roots.push(PathBuf::from(path));
     }
     Ok(roots)
 }
@@ -722,6 +762,21 @@ pub fn settings_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     if let Some(path) = env::var_os("APPDATA") {
         return PathBuf::from(path).join("OpenHP1");
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        for dir in [
+            "/sdcard/Android/data/org.openhp1.game/files",
+            "/storage/emulated/0/Android/data/org.openhp1.game/files",
+            "/sdcard/OpenHP1",
+            "/data/data/org.openhp1.game/files",
+        ] {
+            let path = PathBuf::from(dir);
+            if path.exists() || fs::create_dir_all(&path).is_ok() {
+                return path;
+            }
+        }
     }
 
     let Some(home) = env::var_os("HOME") else {
