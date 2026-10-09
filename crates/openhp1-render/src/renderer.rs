@@ -2144,7 +2144,9 @@ fn texture_needs_recreation(
     mip_level_count: u32,
     image: &TextureImage,
 ) -> bool {
-    width != image.width || height != image.height || mip_level_count != image.mip_level_count()
+    width != image.width
+        || height != image.height
+        || (mip_level_count != 1 && mip_level_count != image.mip_level_count())
 }
 
 fn quantized_flash(flash: [f32; 4]) -> [f32; 4] {

@@ -468,8 +468,7 @@ pub(super) fn texture_with_compression(
         && image.width >= 4
         && image.height >= 4
         && image.width % 4 == 0
-        && image.height % 4 == 0
-        && valid_mip_chain(image);
+        && image.height % 4 == 0;
 
     if can_use_etc2 {
         let format = wgpu::TextureFormat::Etc2Rgba8Unorm;
@@ -480,7 +479,7 @@ pub(super) fn texture_with_compression(
                 height: image.height,
                 depth_or_array_layers: 1,
             },
-            mip_level_count: image.mip_level_count(),
+            mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format,
@@ -488,32 +487,26 @@ pub(super) fn texture_with_compression(
             view_formats: &[],
         });
 
-        let mut total_bytes = 0;
-        for (level, (width, height, rgba)) in texture_levels(image).enumerate() {
-            let compressed = openhp1_texture::compress_etc2_rgba(width, height, rgba);
-            let blocks_x = (width + 3) / 4;
-            let blocks_y = (height + 3) / 4;
-            total_bytes += compressed.len();
+        let compressed = openhp1_texture::compress_etc2_rgba(image.width, image.height, &image.rgba);
+        let blocks_x = image.width / 4;
+        let blocks_y = image.height / 4;
 
-            let mut destination = texture.as_image_copy();
-            destination.mip_level = level as u32;
-            queue.write_texture(
-                destination,
-                &compressed,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(blocks_x * 16),
-                    rows_per_image: Some(blocks_y),
-                },
-                wgpu::Extent3d {
-                    width,
-                    height,
-                    depth_or_array_layers: 1,
-                },
-            );
-        }
+        queue.write_texture(
+            texture.as_image_copy(),
+            &compressed,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(blocks_x * 16),
+                rows_per_image: Some(blocks_y),
+            },
+            wgpu::Extent3d {
+                width: image.width,
+                height: image.height,
+                depth_or_array_layers: 1,
+            },
+        );
 
-        return (texture, total_bytes);
+        return (texture, compressed.len());
     }
 
     let texture = device.create_texture(&wgpu::TextureDescriptor {
