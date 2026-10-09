@@ -41,7 +41,6 @@ pub fn copy_logs(egui_context: Option<&egui::Context>) -> (String, bool) {
     let logs = get_all_logs();
     if let Some(ctx) = egui_context {
         ctx.copy_text(logs.clone());
-        ctx.output_mut(|o| o.copied_text = logs.clone());
     }
 
     let mut saved = Vec::new();
