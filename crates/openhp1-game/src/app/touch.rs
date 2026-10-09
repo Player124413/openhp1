@@ -717,6 +717,10 @@ impl TouchController {
         self.any_touch_triggered
     }
 
+    pub fn is_action_active(&self) -> bool {
+        self.cast_active || self.jump_active || self.interact_active || self.any_touch_triggered
+    }
+
     pub fn render(
         &mut self,
         context: &egui::Context,

@@ -100,20 +100,3 @@ jobs:
           name: openhp1-android-apk
           path: android/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
-
-      - name: Publish or Update Android Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: android-latest
-          name: "OpenHP1 Android Build"
-          body: |
-            ### ✨ OpenHP1 Android Port ✨
-            - **Три кнопки в лаунчере**: Выбрать папку с игрой, Выбрать ZIP-архив, О порте.
-            - **Исправлен вылет**: Устранена ошибка валидации ETC2 (Width 2 is not a multiple of 4).
-            - **Аппаратная оптимизация ETC2/EAC**: Максимальная производительность на мобильных GPU.
-            - **Настраиваемое сенсорное управление**: Перемещение, изменение размера и скрытие кнопок.
-            - **Поддержка архитектур**: `arm64-v8a`, `armeabi-v7a`, `x86_64`.
-          files: android/app/build/outputs/apk/**/*.apk
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

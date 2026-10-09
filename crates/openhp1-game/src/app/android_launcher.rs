@@ -10,7 +10,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::{Window, WindowAttributes, WindowId};
 
-use super::logging::{copy_logs, get_all_logs};
+use super::logging::copy_logs;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AppLanguage {

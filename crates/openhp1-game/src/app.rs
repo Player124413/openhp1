@@ -981,12 +981,7 @@ impl Graphics {
         self.touch
             .apply_to_player_input(&mut input, delta_time, &self.touch_settings);
         self.touch.reset_frame_triggers();
-        let skip_requested = input.jump
-            || input.action
-            || self.touch.cast_active
-            || self.touch.jump_active
-            || self.touch.interact_active
-            || self.touch.any_touch_pressed();
+        let skip_requested = input.jump || self.touch.is_action_active();
         if !self.gameplay_settings.jump_skips_cutscenes {
             self.cutscene_skip = CutsceneSkipState::Inactive;
         } else if self.cutscene_skip == CutsceneSkipState::Inactive && skip_requested {
@@ -1097,7 +1092,7 @@ impl Graphics {
             self.debug_overlay(ui.ctx());
             self.debug_console.ui(ui);
             if !self.game_ui.is_open() || self.touch_editor.is_active {
-                let rect = ui.ctx().screen_rect();
+                let rect = ui.max_rect();
                 let size = [rect.width(), rect.height()];
                 self.touch.render(
                     ui.ctx(),
