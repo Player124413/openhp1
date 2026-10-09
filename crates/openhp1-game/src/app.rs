@@ -41,9 +41,11 @@ use self::{
     ui::GameUi,
 };
 
+pub mod android_launcher;
 mod console;
 mod gameplay_settings;
 mod graphics_settings;
+pub mod logging;
 mod presentation;
 pub mod touch;
 mod ui;

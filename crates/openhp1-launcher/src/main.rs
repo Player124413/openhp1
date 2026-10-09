@@ -273,6 +273,35 @@ impl Launcher {
             }
         }
     }
+
+    fn copy_logs(&mut self, context: &egui::Context) {
+        let logs_dir = openhp1_package::settings_dir().join("Logs");
+        let mut log_content = String::new();
+        if let Ok(entries) = std::fs::read_dir(&logs_dir) {
+            let mut files: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+            files.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
+            if let Some(latest) = files.last() {
+                if let Ok(content) = std::fs::read_to_string(latest.path()) {
+                    log_content = content;
+                }
+            }
+        }
+        if log_content.is_empty() {
+            log_content = format!(
+                "OpenHP1 Status: {}\nGame Root: {:?}\nSettings Dir: {:?}",
+                self.status,
+                self.installation.as_ref().map(|i| i.root()),
+                openhp1_package::settings_dir()
+            );
+        }
+        context.copy_text(log_content.clone());
+        context.output_mut(|o| o.copied_text = log_content);
+        self.status = match self.lang {
+            AppLanguage::Russian => "Логи скопированы в буфер обмена!".to_owned(),
+            AppLanguage::English => "Logs copied to clipboard!".to_owned(),
+        };
+        self.status_color = Color32::from_rgb(100, 240, 140);
+    }
 }
 
 impl eframe::App for Launcher {
@@ -347,6 +376,16 @@ impl eframe::App for Launcher {
                             AppLanguage::Russian => AppLanguage::English,
                             AppLanguage::English => AppLanguage::Russian,
                         };
+                    }
+
+                    ui.separator();
+
+                    let copy_text = match self.lang {
+                        AppLanguage::Russian => "📋 Логи",
+                        AppLanguage::English => "📋 Logs",
+                    };
+                    if ui.button(RichText::new(copy_text).color(Color32::from_rgb(180, 240, 190))).clicked() {
+                        self.copy_logs(&context);
                     }
                 });
 

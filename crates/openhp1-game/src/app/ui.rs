@@ -1956,6 +1956,9 @@ impl GameUi {
             self.options.invert_broom = !self.options.invert_broom;
             self.action = Some(Action::SetInvertBroom(self.options.invert_broom));
         }
+        if option_button(ui, scale, 45.0, 417.0, &self.textures.option_bar, "Copy Logs") {
+            let _ = super::logging::copy_logs(Some(ui.ctx()));
+        }
         if textured_button(
             ui,
             scale,
