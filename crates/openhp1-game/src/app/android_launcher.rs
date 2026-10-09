@@ -1,10 +1,9 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::Result;
 use egui::{Align2, Color32, CornerRadius, RichText, ScrollArea, Stroke, Vec2};
-use openhp1_package::install_from_zip;
+use openhp1_package::{configure_game_installation, install_from_zip};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, Size};
 use winit::event::WindowEvent;
@@ -40,11 +39,51 @@ fn detect_language() -> AppLanguage {
     AppLanguage::English
 }
 
+fn scan_zip_files() -> Vec<(PathBuf, u64)> {
+    let mut zips = Vec::new();
+    let dirs = [
+        PathBuf::from("/sdcard/Download"),
+        PathBuf::from("/sdcard"),
+        PathBuf::from("/storage/emulated/0/Download"),
+        PathBuf::from("/storage/emulated/0"),
+        PathBuf::from("/sdcard/Android/data/org.openhp1.game/files"),
+    ];
+
+    for dir in &dirs {
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(ext) = path.extension() {
+                        if ext.eq_ignore_ascii_case("zip") {
+                            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                            if !zips.iter().any(|(p, _)| p == &path) {
+                                zips.push((path, size));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    zips
+}
+
+fn check_game_folder(path: &Path) -> bool {
+    let has_maps = path.join("Maps").is_dir() || path.join("maps").is_dir();
+    let has_system = path.join("System").is_dir() || path.join("system").is_dir();
+    has_maps && has_system
+}
+
 pub struct AndroidLauncherApp {
     initial_error: Option<String>,
     lang: AppLanguage,
     show_about: bool,
-    show_logs: bool,
+    show_choose_folder: bool,
+    show_choose_zip: bool,
+    custom_folder_path: String,
+    custom_zip_path: String,
+    discovered_zips: Vec<(PathBuf, u64)>,
     toast: Option<(String, Instant)>,
     state: Option<LauncherState>,
 }
@@ -62,45 +101,19 @@ struct LauncherState {
 
 impl AndroidLauncherApp {
     pub fn new(initial_error: Option<String>) -> Self {
+        let zips = scan_zip_files();
         Self {
             initial_error,
             lang: detect_language(),
             show_about: false,
-            show_logs: false,
+            show_choose_folder: false,
+            show_choose_zip: false,
+            custom_folder_path: "/sdcard/OpenHP1".to_owned(),
+            custom_zip_path: String::new(),
+            discovered_zips: zips,
             toast: None,
             state: None,
         }
-    }
-
-    fn try_auto_unpack() -> Result<PathBuf> {
-        let search_dirs = [
-            PathBuf::from("/sdcard/Download"),
-            PathBuf::from("/sdcard"),
-            PathBuf::from("/storage/emulated/0/Download"),
-            PathBuf::from("/storage/emulated/0"),
-            PathBuf::from("/sdcard/Android/data/org.openhp1.game/files"),
-        ];
-
-        let target_dest = PathBuf::from("/sdcard/Android/data/org.openhp1.game/files");
-        let _ = std::fs::create_dir_all(&target_dest);
-
-        for dir in &search_dirs {
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_file() {
-                        if let Some(ext) = path.extension() {
-                            if ext.eq_ignore_ascii_case("zip") {
-                                let inst = install_from_zip(&path, Some(&target_dest))?;
-                                return Ok(inst.root().to_path_buf());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        anyhow::bail!("ZIP-архивы не найдены в папках /sdcard/Download или /sdcard")
     }
 }
 
@@ -212,28 +225,53 @@ impl ApplicationHandler for AndroidLauncherApp {
                 let egui_ctx = state.egui_ctx.clone();
 
                 let mut action_copy_logs = false;
-                let mut action_unpack_zip = false;
-                let mut action_exit = false;
+                let mut action_select_folder: Option<PathBuf> = None;
+                let mut action_unpack_file: Option<PathBuf> = None;
 
                 let egui_output = egui_ctx.run_ui(raw_input, |ui| {
                     egui::Frame::NONE
                         .fill(Color32::from_rgb(8, 10, 18))
                         .show(ui, |ui| {
+                            // Header bar: language switch and copy logs
+                            ui.horizontal(|ui| {
+                                ui.add_space(10.0);
+                                let lang_label = match self.lang {
+                                    AppLanguage::Russian => "🌐 Язык: RU",
+                                    AppLanguage::English => "🌐 Lang: EN",
+                                };
+                                if ui.button(RichText::new(lang_label).size(12.0)).clicked() {
+                                    self.lang = match self.lang {
+                                        AppLanguage::Russian => AppLanguage::English,
+                                        AppLanguage::English => AppLanguage::Russian,
+                                    };
+                                }
+
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.add_space(10.0);
+                                    let copy_label = match self.lang {
+                                        AppLanguage::Russian => "📋 Скопировать логи",
+                                        AppLanguage::English => "📋 Copy Logs",
+                                    };
+                                    if ui.button(RichText::new(copy_label).size(12.0).color(Color32::from_rgb(170, 220, 255))).clicked() {
+                                        action_copy_logs = true;
+                                    }
+                                });
+                            });
+
                             ui.vertical_centered(|ui| {
-                                ui.add_space(16.0);
+                                ui.add_space(8.0);
                                 ui.heading(
                                     RichText::new("✨ OpenHP1 Android ✨")
                                         .color(Color32::from_rgb(255, 215, 0))
-                                        .size(26.0)
+                                        .size(24.0)
                                         .strong(),
                                 );
-                                ui.add_space(4.0);
                                 ui.label(
                                     RichText::new("Harry Potter and the Philosopher's Stone")
                                         .color(Color32::from_rgb(180, 200, 240))
-                                        .size(16.0),
+                                        .size(14.0),
                                 );
-                                ui.add_space(14.0);
+                                ui.add_space(10.0);
 
                                 // Warning & instructions panel
                                 let panel_frame = egui::Frame::window(ui.style())
@@ -247,120 +285,203 @@ impl ApplicationHandler for AndroidLauncherApp {
                                         let (title, desc) = match self.lang {
                                             AppLanguage::Russian => (
                                                 "⚠️ Файлы игры не найдены",
-                                                "Для запуска игры скопируйте оригинальные папки ПК-версии игры:\n• Maps, System, Textures, Sounds\nв любую из следующих папок на телефоне:\n\n1) /sdcard/Android/data/org.openhp1.game/files/\n2) /sdcard/OpenHP1/\n\nЛибо поместите ZIP-архив с игрой в /sdcard/Download и нажмите кнопку «Распаковать ZIP».",
+                                                "Для запуска игры поместите папки (Maps, System, Textures, Sounds) в:\n• /sdcard/Android/data/org.openhp1.game/files/\n• /sdcard/OpenHP1/\nЛибо укажите папку или распакуйте ZIP-архив кнопками ниже.",
                                             ),
                                             AppLanguage::English => (
                                                 "⚠️ Game files not found",
-                                                "To play, please copy original PC game folders:\n• Maps, System, Textures, Sounds\ninto either folder on your phone:\n\n1) /sdcard/Android/data/org.openhp1.game/files/\n2) /sdcard/OpenHP1/\n\nOr place a game ZIP archive in /sdcard/Download and tap «Unpack ZIP».",
+                                                "To play, please copy game folders (Maps, System, Textures, Sounds) to:\n• /sdcard/Android/data/org.openhp1.game/files/\n• /sdcard/OpenHP1/\nOr choose the game directory or unpack a ZIP archive below.",
                                             ),
                                         };
-                                        ui.heading(RichText::new(title).color(Color32::from_rgb(255, 180, 60)).size(17.0));
-                                        ui.add_space(6.0);
-                                        ui.label(RichText::new(desc).color(Color32::from_rgb(220, 225, 240)).size(14.0));
+                                        ui.heading(RichText::new(title).color(Color32::from_rgb(255, 180, 60)).size(16.0));
+                                        ui.add_space(4.0);
+                                        ui.label(RichText::new(desc).color(Color32::from_rgb(220, 225, 240)).size(13.0));
 
                                         if let Some(err) = &self.initial_error {
-                                            ui.add_space(8.0);
-                                            ui.label(RichText::new(format!("Детали: {err}")).color(Color32::from_rgb(240, 120, 100)).size(12.0));
+                                            ui.add_space(6.0);
+                                            ui.label(RichText::new(format!("Детали: {err}")).color(Color32::from_rgb(240, 120, 100)).size(11.0));
                                         }
                                     });
                                 });
 
-                                ui.add_space(14.0);
+                                ui.add_space(16.0);
 
-                                // Action Buttons Row 1
+                                // EXACT THREE BUTTONS REQUESTED BY THE USER
                                 ui.horizontal(|ui| {
-                                    ui.add_space(((ui.available_width() - 540.0) / 2.0).max(0.0));
-                                    let btn_size = Vec2::new(165.0, 42.0);
+                                    ui.add_space(((ui.available_width() - 580.0) / 2.0).max(0.0));
+                                    let btn_size = Vec2::new(185.0, 46.0);
 
-                                    let copy_btn_text = match self.lang {
-                                        AppLanguage::Russian => "📋 Скопировать логи",
-                                        AppLanguage::English => "📋 Copy Logs",
+                                    // Button 1: Choose Game Folder
+                                    let folder_text = match self.lang {
+                                        AppLanguage::Russian => "📁 Выбрать папку",
+                                        AppLanguage::English => "📁 Choose Game Folder",
                                     };
-                                    if ui.add(egui::Button::new(RichText::new(copy_btn_text).size(14.0).strong()).min_size(btn_size)).clicked() {
-                                        action_copy_logs = true;
+                                    if ui.add(egui::Button::new(RichText::new(folder_text).size(14.0).strong()).min_size(btn_size)).clicked() {
+                                        self.show_choose_folder = true;
                                     }
 
-                                    let unpack_btn_text = match self.lang {
-                                        AppLanguage::Russian => "📦 Распаковать ZIP",
-                                        AppLanguage::English => "📦 Unpack ZIP",
+                                    ui.add_space(8.0);
+
+                                    // Button 2: Choose ZIP Archive
+                                    let zip_text = match self.lang {
+                                        AppLanguage::Russian => "📦 Выбрать ZIP-архив",
+                                        AppLanguage::English => "📦 Choose ZIP Archive",
                                     };
-                                    if ui.add(egui::Button::new(RichText::new(unpack_btn_text).size(14.0)).min_size(btn_size)).clicked() {
-                                        action_unpack_zip = true;
+                                    if ui.add(egui::Button::new(RichText::new(zip_text).size(14.0).strong()).min_size(btn_size)).clicked() {
+                                        self.discovered_zips = scan_zip_files();
+                                        self.show_choose_zip = true;
                                     }
 
-                                    let logs_btn_text = match self.lang {
-                                        AppLanguage::Russian => if self.show_logs { "📜 Скрыть логи" } else { "📜 Показать логи" },
-                                        AppLanguage::English => if self.show_logs { "📜 Hide Logs" } else { "📜 Show Logs" },
-                                    };
-                                    if ui.add(egui::Button::new(RichText::new(logs_btn_text).size(14.0)).min_size(btn_size)).clicked() {
-                                        self.show_logs = !self.show_logs;
-                                    }
-                                });
+                                    ui.add_space(8.0);
 
-                                ui.add_space(10.0);
-
-                                // Row 2: About, Language switch, Exit
-                                ui.horizontal(|ui| {
-                                    ui.add_space(((ui.available_width() - 540.0) / 2.0).max(0.0));
-                                    let btn_size = Vec2::new(165.0, 36.0);
-
+                                    // Button 3: About Port
                                     let about_text = match self.lang {
                                         AppLanguage::Russian => "ℹ️ О порте",
                                         AppLanguage::English => "ℹ️ About Port",
                                     };
-                                    if ui.add(egui::Button::new(RichText::new(about_text).size(13.0)).min_size(btn_size)).clicked() {
+                                    if ui.add(egui::Button::new(RichText::new(about_text).size(14.0).strong()).min_size(btn_size)).clicked() {
                                         self.show_about = true;
-                                    }
-
-                                    let lang_toggle = match self.lang {
-                                        AppLanguage::Russian => "🌐 Язык: RU",
-                                        AppLanguage::English => "🌐 Lang: EN",
-                                    };
-                                    if ui.add(egui::Button::new(RichText::new(lang_toggle).size(13.0)).min_size(btn_size)).clicked() {
-                                        self.lang = match self.lang {
-                                            AppLanguage::Russian => AppLanguage::English,
-                                            AppLanguage::English => AppLanguage::Russian,
-                                        };
-                                    }
-
-                                    let exit_text = match self.lang {
-                                        AppLanguage::Russian => "🚪 Выход",
-                                        AppLanguage::English => "🚪 Exit",
-                                    };
-                                    if ui.add(egui::Button::new(RichText::new(exit_text).size(13.0)).min_size(btn_size)).clicked() {
-                                        action_exit = true;
                                     }
                                 });
 
                                 // Toast notification
                                 if let Some((msg, time)) = &self.toast {
-                                    if time.elapsed() < Duration::from_secs(5) {
-                                        ui.add_space(10.0);
-                                        ui.label(RichText::new(msg).color(Color32::from_rgb(100, 240, 140)).size(14.0).strong());
+                                    if time.elapsed() < Duration::from_secs(6) {
+                                        ui.add_space(12.0);
+                                        ui.label(RichText::new(msg).color(Color32::from_rgb(100, 240, 140)).size(13.0).strong());
                                     }
-                                }
-
-                                // Logs scroll area
-                                if self.show_logs {
-                                    ui.add_space(12.0);
-                                    let logs_frame = egui::Frame::window(ui.style())
-                                        .fill(Color32::from_rgb(12, 14, 22))
-                                        .stroke(Stroke::new(1.0, Color32::from_rgb(80, 100, 140)))
-                                        .corner_radius(CornerRadius::same(6));
-
-                                    logs_frame.show(ui, |ui| {
-                                        ui.set_max_width(620.0);
-                                        ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
-                                            ui.label(RichText::new(get_all_logs()).monospace().size(11.0).color(Color32::from_rgb(200, 210, 230)));
-                                        });
-                                    });
                                 }
                             });
                         });
 
-                    // About Modal
+                    // Modal 1: Choose Game Folder
+                    if self.show_choose_folder {
+                        egui::Window::new(if self.lang == AppLanguage::Russian { "📁 Выбор папки с игрой" } else { "📁 Choose Game Folder" })
+                            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+                            .resizable(false)
+                            .collapsible(false)
+                            .frame(
+                                egui::Frame::window(ui.style())
+                                    .fill(Color32::from_rgb(18, 22, 34))
+                                    .stroke(Stroke::new(2.0, Color32::from_rgb(100, 180, 255)))
+                                    .corner_radius(CornerRadius::same(12)),
+                            )
+                            .show(ui.ctx(), |ui| {
+                                ui.set_max_width(520.0);
+                                ui.vertical(|ui| {
+                                    ui.heading(RichText::new(if self.lang == AppLanguage::Russian { "Выберите папку с игрой:" } else { "Select game folder:" }).size(15.0).strong());
+                                    ui.add_space(6.0);
+
+                                    let candidates = [
+                                        "/sdcard/OpenHP1",
+                                        "/sdcard/Android/data/org.openhp1.game/files",
+                                        "/storage/emulated/0/OpenHP1",
+                                        "/storage/emulated/0/Android/data/org.openhp1.game/files",
+                                        "/sdcard/Download",
+                                    ];
+
+                                    for path_str in candidates {
+                                        let path = Path::new(path_str);
+                                        let exists = path.is_dir();
+                                        let has_game = exists && check_game_folder(path);
+
+                                        ui.horizontal(|ui| {
+                                            ui.label(RichText::new(path_str).monospace().size(12.0));
+                                            if has_game {
+                                                if ui.button(RichText::new(if self.lang == AppLanguage::Russian { "✓ Выбрать" } else { "✓ Select" }).color(Color32::GREEN).strong()).clicked() {
+                                                    action_select_folder = Some(path.to_path_buf());
+                                                }
+                                            } else if exists {
+                                                if ui.button(if self.lang == AppLanguage::Russian { "Использовать" } else { "Use" }).clicked() {
+                                                    action_select_folder = Some(path.to_path_buf());
+                                                }
+                                            } else {
+                                                ui.weak(if self.lang == AppLanguage::Russian { "(нет папки)" } else { "(not found)" });
+                                            }
+                                        });
+                                    }
+
+                                    ui.add_space(8.0);
+                                    ui.separator();
+                                    ui.add_space(4.0);
+
+                                    ui.label(if self.lang == AppLanguage::Russian { "Или укажите путь вручную:" } else { "Or enter custom path:" });
+                                    ui.text_edit_singleline(&mut self.custom_folder_path);
+                                    if ui.button(if self.lang == AppLanguage::Russian { "Применить этот путь" } else { "Apply custom path" }).clicked() {
+                                        action_select_folder = Some(PathBuf::from(&self.custom_folder_path));
+                                    }
+
+                                    ui.add_space(10.0);
+                                    if ui.button(if self.lang == AppLanguage::Russian { "Закрыть" } else { "Close" }).clicked() {
+                                        self.show_choose_folder = false;
+                                    }
+                                });
+                            });
+                    }
+
+                    // Modal 2: Choose ZIP Archive
+                    if self.show_choose_zip {
+                        egui::Window::new(if self.lang == AppLanguage::Russian { "📦 Выбор ZIP-архива" } else { "📦 Choose ZIP Archive" })
+                            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+                            .resizable(false)
+                            .collapsible(false)
+                            .frame(
+                                egui::Frame::window(ui.style())
+                                    .fill(Color32::from_rgb(18, 22, 34))
+                                    .stroke(Stroke::new(2.0, Color32::from_rgb(120, 220, 140)))
+                                    .corner_radius(CornerRadius::same(12)),
+                            )
+                            .show(ui.ctx(), |ui| {
+                                ui.set_max_width(520.0);
+                                ui.vertical(|ui| {
+                                    ui.heading(RichText::new(if self.lang == AppLanguage::Russian { "Найденные архивы на устройстве:" } else { "Found archives on device:" }).size(15.0).strong());
+                                    ui.add_space(6.0);
+
+                                    if self.discovered_zips.is_empty() {
+                                        ui.label(RichText::new(if self.lang == AppLanguage::Russian {
+                                            "ZIP-архивы не найдены в /sdcard/Download или /sdcard.\nПоместите ZIP-архив с игрой в /sdcard/Download."
+                                        } else {
+                                            "No ZIP archives found in /sdcard/Download or /sdcard.\nPlease place the game ZIP in /sdcard/Download."
+                                        }).color(Color32::from_rgb(220, 180, 100)));
+                                    } else {
+                                        ScrollArea::vertical().max_height(140.0).show(ui, |ui| {
+                                            for (zip_path, size) in &self.discovered_zips {
+                                                ui.horizontal(|ui| {
+                                                    let name = zip_path.file_name().and_then(|n| n.to_str()).unwrap_or("archive.zip");
+                                                    let mb = *size as f64 / 1_048_576.0;
+                                                    ui.label(format!("{name} ({mb:.1} MB)"));
+                                                    if ui.button(RichText::new(if self.lang == AppLanguage::Russian { "📦 Распаковать" } else { "📦 Unpack" }).color(Color32::from_rgb(120, 230, 150)).strong()).clicked() {
+                                                        action_unpack_file = Some(zip_path.clone());
+                                                    }
+                                                });
+                                            }
+                                        });
+                                    }
+
+                                    ui.add_space(8.0);
+                                    if ui.button(if self.lang == AppLanguage::Russian { "🔄 Обновить поиск архивов" } else { "🔄 Rescan archives" }).clicked() {
+                                        self.discovered_zips = scan_zip_files();
+                                    }
+
+                                    ui.add_space(6.0);
+                                    ui.separator();
+                                    ui.add_space(4.0);
+                                    ui.label(if self.lang == AppLanguage::Russian { "Или путь к конкретному .zip:" } else { "Or custom .zip path:" });
+                                    ui.text_edit_singleline(&mut self.custom_zip_path);
+                                    if ui.button(if self.lang == AppLanguage::Russian { "Распаковать указанный файл" } else { "Unpack entered file" }).clicked() {
+                                        action_unpack_file = Some(PathBuf::from(&self.custom_zip_path));
+                                    }
+
+                                    ui.add_space(10.0);
+                                    if ui.button(if self.lang == AppLanguage::Russian { "Закрыть" } else { "Close" }).clicked() {
+                                        self.show_choose_zip = false;
+                                    }
+                                });
+                            });
+                    }
+
+                    // Modal 3: About Port
                     if self.show_about {
-                        egui::Window::new(if self.lang == AppLanguage::Russian { "О порте OpenHP1" } else { "About OpenHP1 Port" })
+                        egui::Window::new(if self.lang == AppLanguage::Russian { "ℹ️ О порте OpenHP1" } else { "ℹ️ About OpenHP1 Port" })
                             .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
                             .resizable(false)
                             .collapsible(false)
@@ -371,7 +492,7 @@ impl ApplicationHandler for AndroidLauncherApp {
                                     .corner_radius(CornerRadius::same(12)),
                             )
                             .show(ui.ctx(), |ui| {
-                                ui.set_max_width(450.0);
+                                ui.set_max_width(460.0);
                                 ui.vertical_centered(|ui| {
                                     ui.add_space(8.0);
                                     ui.heading(RichText::new("OpenHP1 Android Port").color(Color32::from_rgb(255, 215, 0)).strong());
@@ -409,27 +530,46 @@ impl ApplicationHandler for AndroidLauncherApp {
                     self.toast = Some((msg, Instant::now()));
                 }
 
-                if action_unpack_zip {
-                    match Self::try_auto_unpack() {
-                        Ok(root) => {
+                if let Some(folder) = action_select_folder {
+                    match configure_game_installation(&folder, None) {
+                        Ok(inst) => {
                             let msg = match self.lang {
-                                AppLanguage::Russian => format!("Игра успешно распакована в:\n{}", root.display()),
-                                AppLanguage::English => format!("Game unpacked successfully into:\n{}", root.display()),
+                                AppLanguage::Russian => format!("Папка установлена: {}\nПерезапустите приложение для запуска игры!", inst.root().display()),
+                                AppLanguage::English => format!("Folder configured: {}\nRestart app to start the game!", inst.root().display()),
                             };
                             self.toast = Some((msg, Instant::now()));
+                            self.show_choose_folder = false;
                         }
                         Err(e) => {
                             let msg = match self.lang {
-                                AppLanguage::Russian => format!("Ошибка распаковки: {e}"),
-                                AppLanguage::English => format!("Unpack failed: {e}"),
+                                AppLanguage::Russian => format!("Ошибка выбора папки: {e}"),
+                                AppLanguage::English => format!("Folder configuration error: {e}"),
                             };
                             self.toast = Some((msg, Instant::now()));
                         }
                     }
                 }
 
-                if action_exit {
-                    event_loop.exit();
+                if let Some(zip_file) = action_unpack_file {
+                    let target_dest = PathBuf::from("/sdcard/Android/data/org.openhp1.game/files");
+                    let _ = std::fs::create_dir_all(&target_dest);
+                    match install_from_zip(&zip_file, Some(&target_dest)) {
+                        Ok(inst) => {
+                            let msg = match self.lang {
+                                AppLanguage::Russian => format!("Игра распакована в: {}\nПерезапустите приложение для старта!", inst.root().display()),
+                                AppLanguage::English => format!("Game unpacked into: {}\nRestart app to start!", inst.root().display()),
+                            };
+                            self.toast = Some((msg, Instant::now()));
+                            self.show_choose_zip = false;
+                        }
+                        Err(e) => {
+                            let msg = match self.lang {
+                                AppLanguage::Russian => format!("Ошибка распаковки: {e}"),
+                                AppLanguage::English => format!("Unpack error: {e}"),
+                            };
+                            self.toast = Some((msg, Instant::now()));
+                        }
+                    }
                 }
 
                 state.egui_state.handle_platform_output(&state.window, egui_output.platform_output);

@@ -464,7 +464,14 @@ pub(super) fn texture_with_compression(
     image: &TextureImage,
     use_etc2: bool,
 ) -> (wgpu::Texture, usize) {
-    if use_etc2 && image.width > 0 && image.height > 0 {
+    let can_use_etc2 = use_etc2
+        && image.width >= 4
+        && image.height >= 4
+        && image.width % 4 == 0
+        && image.height % 4 == 0
+        && valid_mip_chain(image);
+
+    if can_use_etc2 {
         let format = wgpu::TextureFormat::Etc2Rgba8Unorm;
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
@@ -512,8 +519,8 @@ pub(super) fn texture_with_compression(
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {
-            width: image.width,
-            height: image.height,
+            width: image.width.max(1),
+            height: image.height.max(1),
             depth_or_array_layers: 1,
         },
         mip_level_count: image.mip_level_count(),
