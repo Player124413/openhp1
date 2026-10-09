@@ -1,4 +1,8 @@
-use std::{path::PathBuf, process::Command};
+use std::{
+    path::PathBuf,
+    process::Command,
+    sync::mpsc::{Receiver, channel},
+};
 
 use anyhow::{Context, Result, anyhow, bail};
 use eframe::egui::{self, Align2, Color32, CornerRadius, Id, RichText, Stroke, TextureHandle, Vec2};
@@ -6,8 +10,10 @@ use openhp1_package::{
     GameInstallation, configure_game_installation, read_openhp1_ini_value,
     resolve_game_installation, save_openhp1_ini_values,
 };
+use serde::Deserialize;
 
 const SPLASH: &[u8] = include_bytes!("../../../splash.jpg");
+const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum AppLanguage {
@@ -38,6 +44,24 @@ fn detect_system_language() -> AppLanguage {
     AppLanguage::English
 }
 
+#[derive(Deserialize, Clone, Debug)]
+pub struct GitHubRelease {
+    pub tag_name: String,
+    pub name: Option<String>,
+    pub html_url: String,
+    pub body: Option<String>,
+    pub published_at: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+enum UpdateStatus {
+    Idle,
+    Checking,
+    Found(GitHubRelease),
+    UpToDate { version: String },
+    Error(String),
+}
+
 fn main() -> Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -63,6 +87,8 @@ struct Launcher {
     lang: AppLanguage,
     show_about_popup: bool,
     show_updates_popup: bool,
+    update_status: UpdateStatus,
+    update_receiver: Option<Receiver<Result<GitHubRelease>>>,
 }
 
 impl Launcher {
@@ -109,7 +135,19 @@ impl Launcher {
             lang,
             show_about_popup: false,
             show_updates_popup: false,
+            update_status: UpdateStatus::Idle,
+            update_receiver: None,
         })
+    }
+
+    fn start_update_check(&mut self) {
+        self.update_status = UpdateStatus::Checking;
+        let (tx, rx) = channel();
+        self.update_receiver = Some(rx);
+        std::thread::spawn(move || {
+            let res = check_github_releases();
+            let _ = tx.send(res);
+        });
     }
 
     fn choose_game_folder(&mut self) {
@@ -240,6 +278,29 @@ impl Launcher {
 impl eframe::App for Launcher {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let context = ui.ctx().clone();
+
+        // Check for async update check results
+        if let Some(rx) = &self.update_receiver {
+            if let Ok(res) = rx.try_recv() {
+                self.update_receiver = None;
+                match res {
+                    Ok(release) => {
+                        let clean_tag = release.tag_name.trim_start_matches(|c| c == 'v' || c == 'V');
+                        if clean_tag == CURRENT_VERSION {
+                            self.update_status = UpdateStatus::UpToDate {
+                                version: release.tag_name.clone(),
+                            };
+                        } else {
+                            self.update_status = UpdateStatus::Found(release);
+                        }
+                    }
+                    Err(err) => {
+                        self.update_status = UpdateStatus::Error(err.to_string());
+                    }
+                }
+            }
+        }
+
         ui.painter()
             .rect_filled(ui.max_rect(), 0.0, Color32::from_rgb(3, 3, 12));
 
@@ -349,6 +410,9 @@ impl eframe::App for Launcher {
                         .clicked()
                     {
                         self.show_updates_popup = true;
+                        if matches!(self.update_status, UpdateStatus::Idle) {
+                            self.start_update_check();
+                        }
                     }
 
                     let about_text = match self.lang {
@@ -391,7 +455,7 @@ impl eframe::App for Launcher {
                     egui::Frame::window(ui.style())
                         .fill(Color32::from_rgb(18, 22, 34))
                         .stroke(Stroke::new(2.0, Color32::from_rgb(220, 185, 90)))
-                        .corner_radius(CornerRadius::same(12))
+                        .corner_radius(CornerRadius::same(12)),
                 )
                 .show(&context, |ui| {
                     ui.set_max_width(460.0);
@@ -410,7 +474,9 @@ impl eframe::App for Launcher {
                         };
                         ui.label(RichText::new(port_by).size(15.0).strong());
                         ui.hyperlink_to(
-                            RichText::new("https://t.me/player1444ports").size(15.0).color(Color32::from_rgb(100, 180, 255)),
+                            RichText::new("https://t.me/player1444ports")
+                                .size(15.0)
+                                .color(Color32::from_rgb(100, 180, 255)),
                             "https://t.me/player1444ports",
                         );
 
@@ -424,15 +490,24 @@ impl eframe::App for Launcher {
                         };
                         ui.label(RichText::new(thanks).size(14.0));
                         ui.hyperlink_to(
-                            RichText::new("https://github.com/SplittyDev/openhp1").size(14.0).color(Color32::from_rgb(140, 200, 255)),
+                            RichText::new("https://github.com/SplittyDev/openhp1")
+                                .size(14.0)
+                                .color(Color32::from_rgb(140, 200, 255)),
                             "https://github.com/SplittyDev/openhp1",
                         );
 
                         let without_it = match self.lang {
                             AppLanguage::Russian => "Без него этот порт бы не вышел!",
-                            AppLanguage::English => "Without it, this port would not have been possible!",
+                            AppLanguage::English => {
+                                "Without it, this port would not have been possible!"
+                            }
                         };
-                        ui.label(RichText::new(without_it).italics().size(13.0).color(Color32::from_rgb(210, 210, 220)));
+                        ui.label(
+                            RichText::new(without_it)
+                                .italics()
+                                .size(13.0)
+                                .color(Color32::from_rgb(210, 210, 220)),
+                        );
 
                         ui.add_space(16.0);
                         let close_text = match self.lang {
@@ -447,11 +522,11 @@ impl eframe::App for Launcher {
                 });
         }
 
-        // Updates Modal Popup
+        // Updates Modal Popup (Checks GitHub Releases)
         if self.show_updates_popup {
             let title = match self.lang {
-                AppLanguage::Russian => "Проверка обновлений",
-                AppLanguage::English => "Check for Updates",
+                AppLanguage::Russian => "Проверка обновлений (GitHub)",
+                AppLanguage::English => "Check for Updates (GitHub)",
             };
             egui::Window::new(title)
                 .id(Id::new("updates_popup_window"))
@@ -462,10 +537,10 @@ impl eframe::App for Launcher {
                     egui::Frame::window(ui.style())
                         .fill(Color32::from_rgb(18, 22, 34))
                         .stroke(Stroke::new(2.0, Color32::from_rgb(100, 160, 240)))
-                        .corner_radius(CornerRadius::same(12))
+                        .corner_radius(CornerRadius::same(12)),
                 )
                 .show(&context, |ui| {
-                    ui.set_max_width(460.0);
+                    ui.set_max_width(480.0);
                     ui.vertical_centered(|ui| {
                         ui.add_space(8.0);
                         ui.heading(
@@ -475,30 +550,158 @@ impl eframe::App for Launcher {
                         );
                         ui.add_space(12.0);
 
-                        let status_text = match self.lang {
-                            AppLanguage::Russian => "У вас установлена актуальная версия OpenHP1 (v0.1.0)!\n\nВсе свежие обновления, патчи и новые порты выходят в Telegram канале:",
-                            AppLanguage::English => "You are running the latest version of OpenHP1 (v0.1.0)!\n\nAll latest updates, patches, and new ports are published in our Telegram channel:",
+                        match &self.update_status {
+                            UpdateStatus::Idle | UpdateStatus::Checking => {
+                                let check_msg = match self.lang {
+                                    AppLanguage::Russian => "Проверка последних релизов на GitHub...",
+                                    AppLanguage::English => "Checking for latest releases on GitHub...",
+                                };
+                                ui.spinner();
+                                ui.add_space(8.0);
+                                ui.label(RichText::new(check_msg).size(14.0));
+                            }
+                            UpdateStatus::Found(release) => {
+                                let new_ver_msg = match self.lang {
+                                    AppLanguage::Russian => "Доступно новое обновление на GitHub!",
+                                    AppLanguage::English => "New update available on GitHub!",
+                                };
+                                ui.label(
+                                    RichText::new(new_ver_msg)
+                                        .color(Color32::from_rgb(120, 240, 150))
+                                        .strong()
+                                        .size(16.0),
+                                );
+                                ui.add_space(8.0);
+
+                                let tag_title = release.name.as_deref().unwrap_or(&release.tag_name);
+                                ui.label(
+                                    RichText::new(format!("Релиз: {tag_title}"))
+                                        .color(Color32::from_rgb(255, 220, 100))
+                                        .size(15.0),
+                                );
+                                ui.add_space(6.0);
+
+                                let open_gh = match self.lang {
+                                    AppLanguage::Russian => "Открыть страницу релиза на GitHub",
+                                    AppLanguage::English => "Open Release Page on GitHub",
+                                };
+                                ui.hyperlink_to(
+                                    RichText::new(open_gh).size(14.0).color(Color32::from_rgb(100, 180, 255)).strong(),
+                                    &release.html_url,
+                                );
+                            }
+                            UpdateStatus::UpToDate { version } => {
+                                let up_to_date_msg = match self.lang {
+                                    AppLanguage::Russian => format!("У вас установлена актуальная версия ({version})!"),
+                                    AppLanguage::English => format!("You are running the latest version ({version})!"),
+                                };
+                                ui.label(
+                                    RichText::new(up_to_date_msg)
+                                        .color(Color32::from_rgb(120, 220, 140))
+                                        .size(15.0)
+                                        .strong(),
+                                );
+                                ui.add_space(6.0);
+                                let no_updates = match self.lang {
+                                    AppLanguage::Russian => "Новых обновлений на GitHub нет.",
+                                    AppLanguage::English => "No new updates found on GitHub.",
+                                };
+                                ui.label(RichText::new(no_updates).size(13.0));
+                            }
+                            UpdateStatus::Error(err) => {
+                                let err_title = match self.lang {
+                                    AppLanguage::Russian => "Не удалось связаться с GitHub:",
+                                    AppLanguage::English => "Could not reach GitHub:",
+                                };
+                                ui.label(
+                                    RichText::new(err_title)
+                                        .color(Color32::from_rgb(240, 130, 110))
+                                        .strong(),
+                                );
+                                ui.label(RichText::new(err).color(Color32::from_rgb(230, 180, 150)).size(12.0));
+                            }
+                        }
+
+                        ui.add_space(14.0);
+                        ui.separator();
+                        ui.add_space(8.0);
+
+                        let tg_label = match self.lang {
+                            AppLanguage::Russian => "Следите за обновлениями и портами в Telegram:",
+                            AppLanguage::English => "Follow updates and new ports on Telegram:",
                         };
-                        ui.label(RichText::new(status_text).size(14.0));
-                        ui.add_space(6.0);
+                        ui.label(RichText::new(tg_label).size(13.0));
                         ui.hyperlink_to(
-                            RichText::new("https://t.me/player1444ports").size(15.0).color(Color32::from_rgb(100, 180, 255)).strong(),
+                            RichText::new("https://t.me/player1444ports").size(14.0).color(Color32::from_rgb(100, 180, 255)),
                             "https://t.me/player1444ports",
                         );
 
-                        ui.add_space(16.0);
-                        let close_text = match self.lang {
-                            AppLanguage::Russian => "Закрыть",
-                            AppLanguage::English => "Close",
-                        };
-                        if ui.button(RichText::new(close_text).size(14.0)).clicked() {
-                            self.show_updates_popup = false;
-                        }
+                        ui.add_space(14.0);
+                        ui.horizontal(|ui| {
+                            ui.add_space(((ui.available_width() - 220.0) / 2.0).max(0.0));
+                            let refresh_text = match self.lang {
+                                AppLanguage::Russian => "Проверить снова",
+                                AppLanguage::English => "Check Again",
+                            };
+                            if ui.button(refresh_text).clicked() {
+                                self.start_update_check();
+                            }
+
+                            let close_text = match self.lang {
+                                AppLanguage::Russian => "Закрыть",
+                                AppLanguage::English => "Close",
+                            };
+                            if ui.button(close_text).clicked() {
+                                self.show_updates_popup = false;
+                            }
+                        });
                         ui.add_space(4.0);
                     });
                 });
         }
     }
+}
+
+fn check_github_releases() -> Result<GitHubRelease> {
+    // 1. Try Player124413/openhp1 fork releases
+    if let Ok(release) = fetch_release_from_url("https://api.github.com/repos/Player124413/openhp1/releases/latest") {
+        return Ok(release);
+    }
+    // 2. Fallback to upstream SplittyDev/openhp1 releases
+    fetch_release_from_url("https://api.github.com/repos/SplittyDev/openhp1/releases/latest")
+}
+
+fn fetch_release_from_url(url: &str) -> Result<GitHubRelease> {
+    let output = Command::new("curl")
+        .args([
+            "-s",
+            "-L",
+            "--max-time",
+            "10",
+            "-H",
+            "User-Agent: OpenHP1-Launcher",
+            "-H",
+            "Accept: application/vnd.github.v3+json",
+            url,
+        ])
+        .output()
+        .context("failed to execute curl")?;
+
+    if !output.status.success() {
+        bail!("curl failed with status {:?}", output.status.code());
+    }
+
+    let text = String::from_utf8(output.stdout)
+        .context("invalid utf-8 in curl response")?;
+
+    if text.contains("\"message\": \"Not Found\"") || text.contains("\"message\":\"Not Found\"") {
+        bail!("release not found");
+    }
+
+    let release: GitHubRelease = serde_json::from_str(&text)
+        .context("failed to parse GitHub release JSON")?;
+
+    Ok(release)
 }
 
 fn launch_game() -> Result<()> {
@@ -562,5 +765,22 @@ mod tests {
             detect_system_language(),
             AppLanguage::English | AppLanguage::Russian
         ));
+    }
+
+    #[test]
+    fn parses_github_release_json() {
+        let json = r#"{
+            "tag_name": "v0.2.0",
+            "name": "Release v0.2.0",
+            "html_url": "https://github.com/SplittyDev/openhp1/releases/tag/v0.2.0",
+            "body": "Fixed bugs and added features"
+        }"#;
+        let release: GitHubRelease = serde_json::from_str(json).expect("valid JSON");
+        assert_eq!(release.tag_name, "v0.2.0");
+        assert_eq!(release.name.as_deref(), Some("Release v0.2.0"));
+        assert_eq!(
+            release.html_url,
+            "https://github.com/SplittyDev/openhp1/releases/tag/v0.2.0"
+        );
     }
 }
