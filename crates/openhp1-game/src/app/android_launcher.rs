@@ -9,7 +9,7 @@ use openhp1_package::{
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, Size};
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, ControlFlow};
+use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use super::logging::copy_logs;
@@ -373,7 +373,7 @@ impl ApplicationHandler for AndroidLauncherApp {
                 let egui_output = egui_ctx.run_ui(raw_input, |ui| {
                     egui::CentralPanel::default()
                         .frame(egui::Frame::NONE.fill(Color32::from_rgb(10, 13, 22)))
-                        .show(ui.ctx(), |ui| {
+                        .show(ui, |ui| {
                             // Header bar
                             ui.horizontal(|ui| {
                                 ui.add_space(8.0);
@@ -786,15 +786,17 @@ impl ApplicationHandler for AndroidLauncherApp {
                 });
 
                 if action_copy_logs {
-                    let msg = match copy_logs() {
-                        Ok(text) => match self.lang {
+                    let (text, copied) = copy_logs(Some(&state.egui_ctx));
+                    let msg = if copied {
+                        match self.lang {
                             AppLanguage::Russian => format!("Логи скопированы в буфер обмена! ({} символов)", text.len()),
                             AppLanguage::English => format!("Logs copied to clipboard! ({} characters)", text.len()),
-                        },
-                        Err(err) => match self.lang {
-                            AppLanguage::Russian => format!("Ошибка копирования логов: {err}"),
-                            AppLanguage::English => format!("Error copying logs: {err}"),
-                        },
+                        }
+                    } else {
+                        match self.lang {
+                            AppLanguage::Russian => format!("Логи собраны ({} символов)", text.len()),
+                            AppLanguage::English => format!("Logs collected ({} characters)", text.len()),
+                        }
                     };
                     self.toast = Some((msg, Instant::now()));
                 }
@@ -945,6 +947,7 @@ impl ApplicationHandler for AndroidLauncherApp {
                         depth_stencil_attachment: None,
                         timestamp_writes: None,
                         occlusion_query_set: None,
+                        multiview_mask: None,
                     });
 
                     state.egui_renderer.render(&mut pass.forget_lifetime(), &paint_jobs, &screen);
