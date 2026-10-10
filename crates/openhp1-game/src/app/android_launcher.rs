@@ -165,6 +165,48 @@ struct LauncherState {
     egui_renderer: egui_wgpu::Renderer,
 }
 
+fn save_launcher_settings(
+    classic_renderer: bool,
+    bilinear_filtering: bool,
+    etc2: bool,
+    cutscene_skip: bool,
+    touch_enabled: bool,
+    touch_opacity: f32,
+) -> Result<(), String> {
+    let renderer_mode = if classic_renderer {
+        "classic"
+    } else {
+        "modern"
+    };
+    let filter_mode = if bilinear_filtering {
+        "linear"
+    } else {
+        "nearest"
+    };
+    let etc2_str = if etc2 { "true" } else { "false" };
+    let cutscene = if cutscene_skip {
+        "true"
+    } else {
+        "false"
+    };
+    let touch = if touch_enabled {
+        "true"
+    } else {
+        "false"
+    };
+    let opacity = format!("{:.2}", touch_opacity);
+
+    save_openhp1_ini_values(&[
+        ("OpenHP1.Renderer", "Mode", renderer_mode),
+        ("OpenHP1.Renderer", "FilterMode", filter_mode),
+        ("OpenHP1.Renderer", "Etc2Compression", etc2_str),
+        ("OpenHP1.Gameplay", "JumpSkipsCutscenes", cutscene),
+        ("OpenHP1.Touch", "Enabled", touch),
+        ("OpenHP1.Touch", "Opacity", &opacity),
+    ])
+    .map_err(|e| format!("{e}"))
+}
+
 impl AndroidLauncherApp {
     pub fn new(initial_error: Option<String>) -> Self {
         let initial_browse = if Path::new("/sdcard/Download").is_dir() {
@@ -208,40 +250,6 @@ impl AndroidLauncherApp {
         }
     }
 
-    fn save_settings(&self) -> Result<(), String> {
-        let renderer_mode = if self.setting_classic_renderer {
-            "classic"
-        } else {
-            "modern"
-        };
-        let filter_mode = if self.setting_bilinear_filtering {
-            "linear"
-        } else {
-            "nearest"
-        };
-        let etc2 = if self.setting_etc2 { "true" } else { "false" };
-        let cutscene = if self.setting_cutscene_skip {
-            "true"
-        } else {
-            "false"
-        };
-        let touch = if self.setting_touch_enabled {
-            "true"
-        } else {
-            "false"
-        };
-        let opacity = format!("{:.2}", self.setting_touch_opacity);
-
-        save_openhp1_ini_values(&[
-            ("OpenHP1.Renderer", "Mode", renderer_mode),
-            ("OpenHP1.Renderer", "FilterMode", filter_mode),
-            ("OpenHP1.Renderer", "Etc2Compression", etc2),
-            ("OpenHP1.Gameplay", "JumpSkipsCutscenes", cutscene),
-            ("OpenHP1.Touch", "Enabled", touch),
-            ("OpenHP1.Touch", "Opacity", &opacity),
-        ])
-        .map_err(|e| format!("{e}"))
-    }
 }
 
 impl ApplicationHandler for AndroidLauncherApp {
@@ -802,7 +810,14 @@ impl ApplicationHandler for AndroidLauncherApp {
                 }
 
                 if action_save_settings {
-                    match self.save_settings() {
+                    match save_launcher_settings(
+                        self.setting_classic_renderer,
+                        self.setting_bilinear_filtering,
+                        self.setting_etc2,
+                        self.setting_cutscene_skip,
+                        self.setting_touch_enabled,
+                        self.setting_touch_opacity,
+                    ) {
                         Ok(()) => {
                             let msg = match self.lang {
                                 AppLanguage::Russian => "✅ Настройки успешно сохранены!".to_string(),
